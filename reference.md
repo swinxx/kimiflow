@@ -124,7 +124,7 @@ For bug fixes this branch replaces the intent/research logic. **Core rule: prove
 **Diagnosis (Phase 2) — the three mandatory steps:**
 - **Reproduce:** ideally a **failing test** (Red). Not reproducible = a finding → clarify with the user.
 - **Verify the root cause:** find AND prove the cause (`file:line` + why that spot produces the symptom). Hypothesis → minimal proof. **Not** the first guess.
-- **Fix research (proactive, BEFORE the fix):** how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
+- **Fix research (proactive, BEFORE the fix):** how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches. A **fresh** Vault hit that already answers it → skip the web step; if you re-search, change the **search vector** — don't repeat a prior query.
 
 **DIAGNOSIS.md:**
 ```
@@ -165,6 +165,7 @@ The vault is an **optional** notes MCP (e.g. Obsidian — `obsidian_simple_searc
 - **Template:** use the vault's own research template if it has one; otherwise the built-in minimal structure below.
 - **Filename:** descriptive title + date suffix `YYYY-MM`. No `/` in the filename.
 - **Frontmatter required:** `date:` + `source:`. `tags:` with `type/research` + topic tags.
+- **Freshness on read:** weigh a hit by its `date:` (+ file mtime via `obsidian_get_recent_changes` for amendments). A fresh hit that answers the question **replaces** web research; re-research only a **stale** hit (fast-moving topic) or one that **doesn't cover the current question** — and then with a **different search vector**, not the same query. Optionally set `updated:` when amending a note (else mtime carries the amendment date).
 - **Structure (built-in fallback):** Question/trigger · Core answer (1–3 sentences) · Details · Gotchas · Sources (with "retrieved YYYY-MM-DD") · Related.
 - **Anti-hallucination:** mark uncertain points "NOT VERIFIED".
 - **Findable index:** maintain one index note so saved research can be found again — reuse the vault's existing MOC if there is one, else append to (or create) a `Research` index note: a date-stamped wikilink + 1-line summary per entry.

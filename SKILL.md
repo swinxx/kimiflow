@@ -63,7 +63,7 @@ Goal: shared understanding BEFORE research/plan. kimiflow clarifies **itself** (
 Goal: kimiflow must **truly understand** the affected code before planning — evidence-based. Full checklists: **reference.md → "Understand & research"**, **"Fix mode"**, **"Project memory & standards"**.
 
 0. **Project memory first** (cheap, all tiers — `CLAUDE.md` is native, the `.kimiflow` files only if present). Read the project's `CLAUDE.md` and, if present, `.kimiflow/STANDARDS.md` + `.kimiflow/DECISIONS.md` → ground truth for conventions/patterns/past decisions. The `Explore` agent then only fills gaps.
-1. **Vault** (a notes MCP such as Obsidian, if connected): `obsidian_simple_search` on the key terms from `INTENT.md`/`PROBLEM.md`; read hits as context. Don't re-research what the vault holds. No MCP → note, continue.
+1. **Vault** (a notes MCP such as Obsidian, if connected): `obsidian_simple_search` on the key terms from `INTENT.md`/`PROBLEM.md`; read hits **with their `date:`** as context. A **fresh** hit that answers the question → don't re-research it (the vault entry *is* the research). Re-research only if it's **stale for a fast-moving topic** (old date + lib/security/pricing → verify against the current state) **or** it **doesn't cover the current question** → then search a **different vector**, not the same query (repeating it only re-confirms a possibly mis-aimed result). No MCP → note, continue.
 
 **Feature → understand & research:**
 2. **Codebase understanding** (read-only, **`Explore` agent**, input `INTENT.md` + project memory): patterns/conventions to match, integration points, data flow, affected modules, **existing tests**, risks/assumptions. **Back every claim with `file:line`**, mark unproven "NOT VERIFIED". Depth by scope.
@@ -73,7 +73,7 @@ Goal: kimiflow must **truly understand** the affected code before planning — e
 **Fix → understand & diagnose** (prove first, then fix):
 2. **Reproduce** — actually trigger the bug, ideally a **failing test** (proof: real + where). Not reproducible = a finding → clarify with the user, don't fix blindly.
 3. **Verify the root cause** (input `PROBLEM.md`) — find AND prove the cause (`file:line` + why that spot produces the symptom). **Not** the first guess.
-4. **Fix research (proactive, BEFORE the fix)** — how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
+4. **Fix research (proactive, BEFORE the fix)** — how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches. A **fresh** Vault hit that already answers it → skip the web step; if you re-search, change the **search vector** — don't repeat a prior query.
 5. **Synthesis → `DIAGNOSIS.md`** (reference.md → "Fix mode"). **Diagnosis gate:** root cause **not** proven → **do NOT fix** (keep investigating or stop + ask).
 
 **Always last — vault-save** (automatic — **only if a vault MCP is connected; else skip + note in STATE**) per **reference.md → "Vault conventions"**. Report the path. Don't save trivial lookups.

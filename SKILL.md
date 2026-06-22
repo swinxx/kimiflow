@@ -73,7 +73,7 @@ Goal: kimiflow must **truly understand** the affected code before planning — e
 **Fix → understand & diagnose** (prove first, then fix):
 2. **Reproduce** — actually trigger the bug, ideally a **failing test** (proof: real + where). Not reproducible = a finding → clarify with the user, don't fix blindly.
 3. **Verify the root cause** (input `PROBLEM.md`) — find AND prove the cause (`file:line` + why that spot produces the symptom). **Not** the first guess.
-4. **Fix research (proactive, BEFORE the fix)** — how is this *currently solved correctly*? Vault → web/context7 → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
+4. **Fix research (proactive, BEFORE the fix)** — how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
 5. **Synthesis → `DIAGNOSIS.md`** (reference.md → "Fix mode"). **Diagnosis gate:** root cause **not** proven → **do NOT fix** (keep investigating or stop + ask).
 
 **Always last — vault-save** (automatic — **only if a vault MCP is connected; else skip + note in STATE**) per **reference.md → "Vault conventions"**. Report the path. Don't save trivial lookups.

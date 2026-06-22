@@ -124,7 +124,7 @@ For bug fixes this branch replaces the intent/research logic. **Core rule: prove
 **Diagnosis (Phase 2) — the three mandatory steps:**
 - **Reproduce:** ideally a **failing test** (Red). Not reproducible = a finding → clarify with the user.
 - **Verify the root cause:** find AND prove the cause (`file:line` + why that spot produces the symptom). Hypothesis → minimal proof. **Not** the first guess.
-- **Fix research (proactive, BEFORE the fix):** how is this *currently solved correctly*? Vault → web/context7 → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
+- **Fix research (proactive, BEFORE the fix):** how is this *currently solved correctly*? Vault → `WebSearch`/context7/`WebFetch` → official docs/issues. The model may be outdated → check the obvious guess against the current state; discard stale/naive approaches.
 
 **DIAGNOSIS.md:**
 ```

@@ -35,13 +35,14 @@ Tunes **how much the orchestrator prints** — nothing else.
 **Helper — all reads AND writes go through one tested script** (`hooks/resolve-verbosity.sh`, invoked as `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/resolve-verbosity.sh`; unit-tested by `hooks/test-resolve-verbosity.sh`):
 - `get [--flag <level>]` → resolves and echoes the level (precedence above).
 - `origin [--flag <level>]` → echoes the winning source `flag|project|global|default`.
+- `onboard-check [--flag <level>]` → echoes `ASK` iff `origin`==`default` (nothing set anywhere), else `SKIP`. Moves the first-run "is it already set?" decision out of the orchestrator's judgment and into the script, so onboarding can't misfire on an already-configured project.
 - `set <project|global> <level>` → validates, `mkdir -p`s the parent, writes, **verifies the write** (stderr + exit 1 on failure — never a false success), echoes the path. A garbage level/scope is rejected without writing.
 
 **Invocations (orchestrator behavior):**
 - **`--quiet` / `--verbose`** — resolve this run only via `get --flag <level>`; never call `set`, never persist.
 - **`--set-verbosity <level>`** — utility invocation: `set project <level>`, report the path, **exit** (no loop).
 - **`--settings`** — utility invocation: ask level **and** scope (project/global) → `set <scope> <level>`, report, **exit**.
-- **First-run onboarding** — at Phase 0 of a normal run, fire **iff interactive ∧ `origin`==`default`** (no flag, no project file, no global file): ask **once** for level + save-scope → `set <scope> <level>`. An explicit answer makes `origin`≠`default` ⇒ never asked again. **Headless (no interactive channel) or the user dismisses ⇒ `balanced`, no `set`, no block** (so `origin` stays `default` and a later interactive run may ask again — only an explicit answer persists).
+- **First-run onboarding** — at Phase 0 of a normal run, run `onboard-check` and fire **iff it prints `ASK` ∧ the session is interactive**. `ASK` already encodes the whole config precondition (no flag, no project file, no global file) — it is **mechanical**, not the orchestrator's to re-derive. Then ask **once** for level + save-scope → `set <scope> <level>`. An explicit answer makes the next `onboard-check` print `SKIP` ⇒ never asked again. **`SKIP`, headless (no interactive channel), or the user dismisses ⇒ `balanced`, no `set`, no block** (so it stays unset and a later interactive run may ask again — only an explicit answer persists).
 
 ---
 

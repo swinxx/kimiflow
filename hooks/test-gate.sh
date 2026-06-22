@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# flow — hard test-gate (opt-in, safe). Blocks finishing while the project's
+# kimiflow — hard test-gate (opt-in, safe). Blocks finishing while the project's
 # tests are red. NO-OP unless the project opts in via a LOCAL, untracked
 # `.kimiflow/test-gate` (a file whose first line is the test command). A git-TRACKED
 # (committed) marker is REFUSED — its first line is eval'd, so a committed marker
-# from a cloned repo would be a drive-by. Installing flow never gates unrelated work.
+# from a cloned repo would be a drive-by. Installing kimiflow never gates unrelated work.
 set -u
 
 input="$(cat 2>/dev/null || true)"
@@ -30,10 +30,10 @@ cmd="$(head -n 1 "$marker" 2>/dev/null || true)"
 
 # Security: only run a LOCAL, untracked marker. A git-TRACKED (committed) `.kimiflow/test-gate`
 # could be a drive-by from a cloned repo — its first line is eval'd. An untracked marker
-# can only have been created locally (by you or by flow); refuse to run a tracked one.
+# can only have been created locally (by you or by kimiflow); refuse to run a tracked one.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
    && git ls-files --error-unmatch "$marker" >/dev/null 2>&1; then
-  printf 'flow test-gate: refusing to run a git-tracked .kimiflow/test-gate (drive-by risk) — keep it local/untracked to enable.\n' >&2
+  printf 'kimiflow test-gate: refusing to run a git-tracked .kimiflow/test-gate (drive-by risk) — keep it local/untracked to enable.\n' >&2
   exit 0
 fi
 
@@ -45,8 +45,8 @@ fi
 # Tests failed → block the stop and feed the tail of the output back.
 tail_out="$(printf '%s' "$out" | tail -n 30)"
 if command -v jq >/dev/null 2>&1; then
-  printf '%s' "$tail_out" | jq -Rs '{decision:"block", reason:("flow test-gate: tests are red — fix before finishing.\n\n" + .)}'
+  printf '%s' "$tail_out" | jq -Rs '{decision:"block", reason:("kimiflow test-gate: tests are red — fix before finishing.\n\n" + .)}'
 else
-  printf '{"decision":"block","reason":"flow test-gate: tests are red — fix before finishing."}'
+  printf '{"decision":"block","reason":"kimiflow test-gate: tests are red — fix before finishing."}'
 fi
 exit 0

@@ -4,6 +4,47 @@ Detailed conventions for the orchestrator. Read a section only when its phase ca
 
 ---
 
+## Display verbosity (all phases)
+
+Tunes **how much the orchestrator prints** — nothing else.
+
+**Engine invariant (the whole point):** gates, on-disk artifacts (INTENT/PLAN/findings/…), evidence gathered, subagents spawned, thresholds and acceptance standards are **identical at every level**. Verbosity changes only the *visible chat output*; quality and rigor are constant. No gate/threshold/cost/scope instruction may ever be made conditional on verbosity.
+
+**Levels (visible output only):**
+| level | what the orchestrator prints |
+|---|---|
+| `quiet` | minimum: terse phase-marker lines; artifacts = **path only** (no 3-line summary); evidence = pass/fail + path; gate verdict still one line. Everything still happens — almost nothing is narrated. |
+| `balanced` *(default)* | the Terse-output HARD RULE as written in SKILL.md: one-line phase announcement, ≤3-line artifact summary + path, one-line gate verdict, decisive evidence line(s). |
+| `verbose` | fuller narration: multi-clause phase context, richer artifact summaries, more evidence lines, reasoning shown. |
+
+**Bounded at every level:** invariant **(b)** of the HARD RULE — *never paste a full artifact or log dump into chat* — holds at **all** levels, `verbose` included. Verbose only lengthens summaries / adds narration; it never dumps a whole file or full logs. (This keeps the anti-bloat goal intact.)
+
+**Precedence:** `flag > project > global > balanced`.
+
+| source | location | set by |
+|---|---|---|
+| flag | `--quiet` / `--verbose` (one-off, **never persists**) | the invocation |
+| project | `.flow/verbosity` (at the git root) | `--set-verbosity`, `--settings`, onboarding |
+| global | `~/.claude/kimiflow/verbosity` | `--settings`, onboarding |
+| default | — | `balanced` |
+
+**File format (both scopes):** a single line — the bare level word + newline (e.g. `verbose`). No keys, no other content. This format **structurally enforces the self-contained rule**: only a valid level word is ever read/honored, so a gate/cost/scope line placed in (especially) the global file is not a level and is silently ignored.
+
+**Self-contained rule:** **only verbosity may live globally.** Nothing gate-, threshold-, scope-tier- or cost-related is ever read from `~/.claude` — those stay project-local / embedded in the skill (see "Self-contained — the skill is the authority" in SKILL.md). Verbosity is the single permitted global escape *because* it touches only presentation.
+
+**Helper — all reads AND writes go through one tested script** (`hooks/resolve-verbosity.sh`, invoked as `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/resolve-verbosity.sh`; unit-tested by `hooks/test-resolve-verbosity.sh`):
+- `get [--flag <level>]` → resolves and echoes the level (precedence above).
+- `origin [--flag <level>]` → echoes the winning source `flag|project|global|default`.
+- `set <project|global> <level>` → validates, `mkdir -p`s the parent, writes, **verifies the write** (stderr + exit 1 on failure — never a false success), echoes the path. A garbage level/scope is rejected without writing.
+
+**Invocations (orchestrator behavior):**
+- **`--quiet` / `--verbose`** — resolve this run only via `get --flag <level>`; never call `set`, never persist.
+- **`--set-verbosity <level>`** — utility invocation: `set project <level>`, report the path, **exit** (no loop).
+- **`--settings`** — utility invocation: ask level **and** scope (project/global) → `set <scope> <level>`, report, **exit**.
+- **First-run onboarding** — at Phase 0 of a normal run, fire **iff interactive ∧ `origin`==`default`** (no flag, no project file, no global file): ask **once** for level + save-scope → `set <scope> <level>`. An explicit answer makes `origin`≠`default` ⇒ never asked again. **Headless (no interactive channel) or the user dismisses ⇒ `balanced`, no `set`, no block** (so `origin` stays `default` and a later interactive run may ask again — only an explicit answer persists).
+
+---
+
 ## Intent clarification (grill, plain language) (Phase 1)
 
 Goal: shared understanding BEFORE research/plan. kimiflow runs the interview **itself** (embedded, no external skill).

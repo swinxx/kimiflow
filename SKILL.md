@@ -2,7 +2,7 @@
 name: kimiflow
 description: Feature & bug-fix loop — clarify (plain language) → understand & research / diagnose (memory-first) → plan with testable acceptance criteria → plan-gate (independent reviewers, binary, cap 3) → implement → verify against specs → code-review → commit (stops first). Fix mode proves the problem, verifies the root cause, and researches the correct fix BEFORE fixing. Modes: full run · --prepare · --resume <slug> · --fix. Manual only via /kimiflow.
 disable-model-invocation: true
-argument-hint: <feature-or-bug> [--fix] [--prepare]  ·  --resume <slug>
+argument-hint: <feature-or-bug> [--fix] [--prepare] [--quiet|--verbose] [--set-verbosity <level>] [--settings]  ·  --resume <slug>
 ---
 
 # kimiflow — Feature & Fix Loop
@@ -17,11 +17,12 @@ You are the **orchestrator**. Run the phases below as a state machine, delegate 
 - **`/kimiflow … --prepare`** — **prepare only**: phases 0–4, then STOP. Package lives in `.flow/<slug>/`; implement later, even in a new session.
 - **`/kimiflow --resume <slug>`** — **continue**: read `.flow/<slug>/STATE.md`, resume at the first open phase. No re-clarification — the spec files suffice. Without `<slug>` → list existing `.flow/*/` with status and ask.
 - **Feature or fix:** kimiflow detects from the request whether you are **building** or **fixing a bug** and routes accordingly. Force with **`/kimiflow --fix <bug>`**.
+- **Display verbosity (visible output only — engine unchanged):** `--quiet` / `--verbose` set the level for a **single run** (never persisted); **`--set-verbosity <level>`** writes the **project** default (`.flow/verbosity`) and exits; **`--settings`** opens a dialog to pick level **+** scope (project / global) and exits. Precedence: **`flag > project > global > balanced`** (project `.flow/verbosity`, global `~/.claude/kimiflow/verbosity`). On a **first run** with no config and no flag, kimiflow asks **once** (interactive only) — headless or dismissed → `balanced`, no block. Levels change only how much you print; gates/artifacts/evidence/subagents are identical. Details: **reference.md → "Display verbosity"**.
 
 ## Core principles (apply in ALL phases)
 
 - **Language: reply in the user's language.** Detect the language the user writes in and use it for everything they see and for the artifacts they review (INTENT/PROBLEM/PLAN/…). These English instructions do NOT dictate the conversation language.
-- **Terse output (HARD RULE — governs every phase; this is where runs bloat).** Your visible output is **control-plane only**: a phase line, the gate verdict, the decisive evidence, and a question when you need an answer. Concretely:
+- **Terse output (HARD RULE — governs every phase; this is where runs bloat).** This rule is the **`balanced`** baseline; the resolved **display-verbosity** level scales it — `quiet` prints even less, `verbose` adds narration but stays bounded by **(b)** — while the *engine* (gates, artifacts, evidence, subagents, thresholds) is **identical at every level** (reference.md → "Display verbosity"). Your visible output is **control-plane only**: a phase line, the gate verdict, the decisive evidence, and a question when you need an answer. Concretely:
   - **(a) One-line phase announcements** — marker + name + ≤1 clause. Never a paragraph.
   - **(b) NEVER paste a full artifact into chat** (INTENT/PROBLEM/RESEARCH/DIAGNOSIS/PLAN/ACCEPTANCE). Write it to its file; show a **≤3-line summary + the path**. The user opens the file for detail. (This is the #1 volume leak.)
   - **(c) Gate verdict = ONE line** — e.g. `gate open · open BLOCKER/HIGH: 0`. No narrative; the reasoning lives in `REVIEW.md`.
@@ -48,6 +49,7 @@ You are the **orchestrator**. Run the phases below as a state machine, delegate 
    - **Default = `small`** — most runs stay here; `large` multiplies subagent/round (token) cost, so it's the exception, not a reflex. Bump to **`large`** only if ≥~5 files · new dependency or data migration · auth/security/money/privacy path · **subtle/hard-to-reproduce bug** · user asks for the full loop.
    - **`trivial`** = 1–2 files, no risk (fix: obvious cause, e.g. a typo).
    - When in doubt, the **smaller** tier. Effect: trivial → no loop, no grill (implement/fix, verify briefly, commit-gate). small → reduced loop (light clarification, 1 reviewer, sequential). large → full loop **+ kimiflow enables the hard test-gate** for the repo (the marker is written in phase 7 from the phase-6-verified test command; reference.md → "Hard test-gate").
+6. **Display verbosity + first-run onboarding (resolve at the very start — it governs how much you print from here on).** Map any `--quiet`/`--verbose` to a level and resolve via `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/resolve-verbosity.sh get [--flag <level>]`. If **no** verbosity flag was given, the run is **interactive**, and `… resolve-verbosity.sh origin`==`default` (no project and no global config) → ask **once** for level + save-scope, then `… resolve-verbosity.sh set <project|global> <level>`; **headless or dismissed → `balanced`, no write, no block.** Utility invocations `--set-verbosity <level>` (→ `set project`) and `--settings` (dialog → `set <scope>`) write config, report the path, and **exit** — they do not run the loop. The level changes only output volume, never the engine. Details: **reference.md → "Display verbosity"**.
 
 ## 🔵 Phase 1 — Clarify (plain language): Intent (feature) or Problem (fix)
 
@@ -126,6 +128,8 @@ Run each check, show real output, prove the goal — details: **reference.md →
 4. **Project memory (if enabled).** Append newly **verified** conventions to `.flow/STANDARDS.md` and a 3–5 line entry to `.flow/DECISIONS.md` (append-only, verified content only). Optional one-line run record in `.flow/LEDGER.md` (slug, scope, rounds, gate result, knobs). Details: **reference.md → "Project memory & standards"**.
 
 ## Scaling knobs (OFF by default — enable within the agent budget; record in STATE.md)
+
+> **Display verbosity is NOT a knob.** It is always-on and changes only visible output volume — never gates, cost, quality, or behavior. It must never be coupled to anything gate- or cost-related (reference.md → "Display verbosity").
 
 - **Parallel implementation (incl. merge):** ≥2 genuinely independent, file-disjoint, small tasks → implementers with `isolation: worktree` (foreground), then sequential rebase/merge (test baseline after each, no octopus), then phase 6.
 - **Best-of-N with tests:** a hard, **fully test-encoded** task → build 2–3 candidate implementations in parallel worktrees, keep the one passing the most acceptance + regression tests. Lift only exists *because* kimiflow has the test oracle. Counts against the agent budget.

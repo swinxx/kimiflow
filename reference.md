@@ -30,7 +30,7 @@ Tunes **how much the orchestrator prints** — nothing else.
 
 **File format (both scopes):** a single line — the bare level word + newline (e.g. `verbose`). No keys, no other content. This format **structurally enforces the self-contained rule**: only a valid level word is ever read/honored, so a gate/cost/scope line placed in (especially) the global file is not a level and is silently ignored.
 
-**Self-contained rule:** **only verbosity may live globally.** Nothing gate-, threshold-, scope-tier- or cost-related is ever read from `~/.claude` — those stay project-local / embedded in the skill (see "Self-contained — the skill is the authority" in SKILL.md). Verbosity is the single permitted global escape *because* it touches only presentation.
+**Self-contained rule:** **only verbosity may live globally.** Nothing gate-, threshold-, scope-tier- or cost-related is ever read from `~/.claude` — those stay project-local / embedded in the skill (see "Self-contained — the skill is the authority" in SKILL.md). Verbosity is the single permitted global escape *because* it touches only presentation. (The pre-build summary gate's toggle lives **project-local** — `.kimiflow/build-gate` — for exactly this reason: it is gate-related, so it must never be read from `~/.claude`.)
 
 **Helper — all reads AND writes go through one tested script** (`hooks/resolve-verbosity.sh`, invoked as `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/resolve-verbosity.sh`; unit-tested by `hooks/test-resolve-verbosity.sh`):
 - `get [--flag <level>]` → resolves and echoes the level (precedence above).
@@ -41,8 +41,20 @@ Tunes **how much the orchestrator prints** — nothing else.
 **Invocations (orchestrator behavior):**
 - **`--quiet` / `--verbose`** — resolve this run only via `get --flag <level>`; never call `set`, never persist.
 - **`--set-verbosity <level>`** — utility invocation: `set project <level>`, report the path, **exit** (no loop).
-- **`--settings`** — utility invocation: ask level **and** scope (project/global) → `set <scope> <level>`, report, **exit**.
+- **`--settings`** — utility invocation: ask verbosity level **and** scope (project/global) → `set <scope> <level>`; AND ask the pre-build gate `on`/`off` (project scope only) → `resolve-build-gate.sh set <on|off>`; report the paths, **exit**.
 - **First-run onboarding** — at Phase 0 of a normal run, run `onboard-check` and fire **iff it prints `ASK` ∧ the session is interactive**. `ASK` already encodes the whole config precondition (no flag, no project file, no global file) — it is **mechanical**, not the orchestrator's to re-derive. Then ask **once** for level + save-scope → `set <scope> <level>`. An explicit answer makes the next `onboard-check` print `SKIP` ⇒ never asked again. **`SKIP`, headless (no interactive channel), or the user dismisses ⇒ `balanced`, no `set`, no block** (so it stays unset and a later interactive run may ask again — only an explicit answer persists).
+
+---
+
+## Pre-build summary gate (Phase 4 → Phase 5)
+
+A user-approval checkpoint between the (internally vetted) plan and implementation. **Project-local, default on; control-flow only — it never changes the engine.**
+
+- **Toggle:** `.kimiflow/build-gate` at the git root, one line `on` | `off`. Missing/invalid → `on` (fail-safe). Read/written ONLY by the unit-tested `hooks/resolve-build-gate.sh` (`get` / `set <on|off>`). **Project-local only** — the self-contained rule forbids gate-related config in `~/.claude`; there is no global build-gate and no per-run flag.
+- **Fires** at the end of Phase 4 (after the plan-gate opens) **iff `get`==`on` ∧ the session is interactive**.
+- **Summary content** (condensed from existing artifacts, not re-researched): Problem/Goal · Decisions · Plan/Design · Tests/Acceptance (`AC-N → test_name`) · Risks · + artifact paths. A **bounded terse-output exemption** like the commit-gate: structured summary + paths, never a full-artifact dump (invariant (b) still holds).
+- **Outcomes:** approve → Phase 5; "change" → back to Phase 3 (revise → re-gate); `off` → straight to Phase 5; **headless / no answer → treat like `--prepare`** (STOP, update STATE, emit the `--resume` command — never build unapproved).
+- **Set via `--settings`** (project scope only).
 
 ---
 

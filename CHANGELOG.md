@@ -2,6 +2,16 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.8
+
+### Fixed
+- **commit-secret-gate — bulk-add false positive across subcommands.** The bulk-add guard scanned
+  the whole compound command for a bare `.` / `-A` / `--all`, so a named `git add foo` combined with
+  a `.` pathspec in a DIFFERENT subcommand (e.g. `git add foo && git grep -- .`) was wrongly refused
+  as `git add .`. The check is now scoped to the `git add` invocation's own args (segment after `add`,
+  bounded by `;&|`). Genuine bulk adds (`git add .`, `-A`, `--all`, `git add foo .`) stay blocked;
+  tests added both ways.
+
 ## 0.1.7
 
 ### Added

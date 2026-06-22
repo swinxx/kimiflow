@@ -2,6 +2,25 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.3
+
+### Added
+- **Pre-build summary gate** — at the end of Phase 4 (after the plan-gate opens), kimiflow
+  prints a structured summary (problem/goal · decisions · plan · tests/acceptance · risks +
+  artifact paths) and **waits for your OK** before implementing. Project-local toggle
+  `.kimiflow/build-gate` (`on`/`off`, default `on`), set via `--settings`; never global
+  (self-contained rule). Control-flow only — the engine is unchanged. Toggle resolved by the
+  unit-tested `hooks/resolve-build-gate.sh`.
+- **Native phase task-list** — Phase 0 creates a glance widget (`TaskCreate`/`TaskUpdate`) of
+  the phases being run; complements `STATE.md` and the colored markers, replaces narrated status.
+
+### Changed
+- **Deletions are now caller-verified** — removing code requires a recorded zero-caller proof
+  (`grep`); an unproven deletion is a code-review BLOCKER. Load-bearing-but-removable-looking code
+  goes on a do-NOT-touch list instead.
+- **Plan tasks carry a `Consumes:`/`Produces:` interface block** for parallel/worktree implementers.
+- **`large`-scope plans record 2–3 considered alternatives** + the selecting trade-off.
+
 ## 0.1.2
 
 ### Added

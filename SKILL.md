@@ -151,6 +151,6 @@ Run each check, show real output, prove the goal — details: → reference.md "
 - **Best-of-N with tests:** a hard, fully test-encoded task → build 2–3 candidate implementations in parallel worktrees, keep the one passing the most acceptance + regression tests. Exists only because kimiflow has the test oracle. Counts against the agent budget.
 - **Cross-family reviewer:** route one plan/code reviewer to a different model family (e.g. the `codex` CLI if available) → breaks same-family blind spots.
 - **Multi-run gate:** for `large`/critical, take the reviewer's binary verdict 3× by majority (variance reduction).
-- **Deeper debugging:** for a stubborn bug, pull in `superpowers:systematic-debugging`.
+- **Deeper debugging:** for a stubborn bug, stop patching and run a systematic, hypothesis-first pass (reproduce → isolate → root-cause) before further edits.
 - **Hard test-gate (opt-in, per project):** kimiflow ships a Stop hook (`hooks/`) that blocks finishing on red tests — see → reference.md "Hard test-gate" to enable.
 - **Anti-reward-hacking hardening (critical code):** held-out/hidden tests, stricter diff inspection for test manipulation.

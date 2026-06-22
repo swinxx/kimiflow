@@ -1,6 +1,6 @@
 # kimiflow Pre-Build-Gate + Phase-Tasklist Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For implementers:** execute this plan task-by-task; steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a project-local, default-on pre-build summary gate (stop for user approval at the end of Phase 4) and a native phase task-list widget to the kimiflow skill — without changing the engine.
 
@@ -421,7 +421,7 @@ git commit -m "feat: caller-verified deletion gate (zero-caller proof required t
 
 ---
 
-### Task 5: A4 — Consumes/Produces interface block in plans (superpowers)
+### Task 5: A4 — Consumes/Produces interface block in plans
 
 **Files:**
 - Modify: `reference.md` (new note near the acceptance-criteria/plan guidance)
@@ -462,7 +462,7 @@ git commit -m "feat: Consumes/Produces interface block for parallel plan tasks"
 
 ---
 
-### Task 6: A5 — considered alternatives for large scope (superpowers)
+### Task 6: A5 — considered alternatives for large scope
 
 **Files:**
 - Modify: `reference.md` ("Understand & research")

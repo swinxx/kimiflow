@@ -1,6 +1,6 @@
 # kimiflow Audit/Cleanup-Mode Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For implementers:** execute this plan task-by-task; steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a third kimiflow mode — `audit` (cleanup via the ponytail lens) — that finds over-engineered/dead code in a bounded target, presents tagged slices for approval, and executes them slice-by-slice with a per-slice verify gate.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Execute the prior plan FIRST.** `docs/superpowers/plans/2026-06-22-kimiflow-prebuild-gate-and-phase-tasklist.md` (Tasks 1–7) must be done — this plan references A1 (Phase-4 summary gate) and A3 (caller-verified deletion) as existing. Do not start this plan until that one is merged.
+- **Execute the prior plan FIRST.** `design/plans/2026-06-22-kimiflow-prebuild-gate-and-phase-tasklist.md` (Tasks 1–7) must be done — this plan references A1 (Phase-4 summary gate) and A3 (caller-verified deletion) as existing. Do not start this plan until that one is merged.
 - **Engine unchanged:** audit is a new execution line; it must not alter feature/fix, the quality gates, thresholds, or artifacts.
 - **Bounded target, repo-wide greps:** the audit *analyzes* only the given target path; every caller-verification `grep` runs over the WHOLE repo (`src` + tests), never only the target.
 - **Safety (verbatim):** caller-grep is a documented MINIMUM (dynamic/reflective refs are a blind spot); a deletion needs grep==0 AND survives adversarial "find a live caller" AND tests stay green; recently-touched zero-caller code is treated as WIP (git-history-freshness) → downgrade/skip; on any doubt, downgrade or skip — never delete on assumption.

@@ -120,6 +120,10 @@ am besten".
 chosen direction, which Clarify then narrows. **Resume:** Explore done with a chosen direction ⇒
 `--resume` starts at Phase 1 Clarify, seeded by it.
 
+**STATE:** the `Phase E (explore): open|in-progress|done` line is written **only when Explore runs** —
+it is **absent on non-explore runs** (the phase is purely additive; a run without `--explore`/an
+accepted offer is behaviorally unchanged).
+
 ---
 
 ## Intent clarification (grill, plain language) (Phase 1)

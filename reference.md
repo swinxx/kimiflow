@@ -160,11 +160,11 @@ For bug fixes this branch replaces the intent/research logic. **Core rule: prove
 
 ---
 
-## Audit mode (ponytail lens) (Phase 1–7)
+## Audit mode (Phase 1–7)
 
 A third mode (beside feature/fix) to safely shrink over-engineered / dead code in a **bounded target**. **Staged:** find → report → approve → execute. **Engine unchanged**; reuses the deletion gate ("Code mandate"), adversarial reviewers ("Review rubric"), the Phase-4 summary gate, and atomic commits.
 
-**Core rule (ponytail Rung-1):** for each item ask not "can we dedupe" but **"should this exist at all?"** — resolves to *delete* or *earns-its-place → simplify*. Every cut is **caller-verified at execution time**; on any doubt, downgrade or skip — never delete on assumption.
+**Core rule (existence-first):** for each item ask not "can we dedupe" but **"should this exist at all?"** — resolves to *delete* or *earns-its-place → simplify*. Every cut is **caller-verified at execution time**; on any doubt, downgrade or skip — never delete on assumption.
 
 **Tags:** `yagni` (speculative architecture) · `delete` (dead, zero-caller) · `shrink` (dedupe, behavior preserved) · `stdlib` (hand-rolled → standard library, edge-cases preserved).
 
@@ -179,7 +179,7 @@ A third mode (beside feature/fix) to safely shrink over-engineered / dead code i
 ```
 ## Slice <n>: <scope>  (~−<x> lines)
 **Scope:** <paths>
-**ponytail lens (why each exists):** per item — delete | earns-its-place→simplify
+**Existence lens (why each exists):** per item — delete | earns-its-place→simplify
 **Findings (ranked):**
 | tag | what to cut | replacement | path:line | repo-wide pre-delete grep (→ 0 / expected) | freshness |
 **do-NOT-touch:** <symbol> — <why it stays despite the grep suspicion>

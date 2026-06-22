@@ -1,16 +1,16 @@
-# Design: kimiflow — Audit/Cleanup-Modus (ponytail lens)
+# Design: kimiflow — Audit/Cleanup-Modus
 
 - **Datum:** 2026-06-22
-- **Status:** Design freigegeben (brainstorming) → bereit für `writing-plans`
+- **Status:** Design freigegeben
 - **Sprache:** Prosa Deutsch (Review-Sprache des Users); Code-Identifier/Pfade/Section-Namen Englisch.
 - **Abhängigkeit:** baut auf **A1 (Pre-Build-Summary-Gate)** + **A3 (caller-verified deletion gate)** aus `2026-06-22-kimiflow-prebuild-gate-and-phase-tasklist-design.md` auf. Diese sollten zuerst umgesetzt sein (Audit-Modus nutzt beide wieder).
-- **Recherche-Grundlage:** Vault → `Dead-Code-Audit — Scope & Safety für KI-Agenten (ponytail-Lens) 2026-06`.
+- **Recherche-Grundlage:** Vault → `Dead-Code-Audit — Scope & Safety für KI-Agenten`.
 
 ## Problem / Ziel
 
-kimiflow hat **feature-mode** und **fix-mode**, aber keinen Modus, um **bestehenden over-engineered/toten Code sicher zu entschlacken**. Ziel: ein **dritter Modus** (Audit/Cleanup) nach der „ponytail lens" — **staged**: finden → Report → Freigabe → ausführen — der die kimiflow-Engine (Gates, Subagenten, atomare Commits) wiederverwendet und **die Engine nicht ändert** (reine neue Ausführungs-Linie, keine Änderung an feature/fix oder den Qualitäts-Gates).
+kimiflow hat **feature-mode** und **fix-mode**, aber keinen Modus, um **bestehenden over-engineered/toten Code sicher zu entschlacken**. Ziel: ein **dritter Modus** (Audit/Cleanup) nach der „existence-first lens" — **staged**: finden → Report → Freigabe → ausführen — der die kimiflow-Engine (Gates, Subagenten, atomare Commits) wiederverwendet und **die Engine nicht ändert** (reine neue Ausführungs-Linie, keine Änderung an feature/fix oder den Qualitäts-Gates).
 
-## Entscheidungen (im Brainstorming festgelegt)
+## Entscheidungen
 
 - **Voller dritter Modus, phasen-gemappt** — Audit verzweigt die Phasen 1–7 (analog wie fix die Phasen 1–2 verzweigt). Maximaler Reuse, on-brand. (Alternativen „leichtes Sub-Flow" / „nur Rezept" verworfen.)
 - **Staged** (find → Report → Freigabe → execute) — nutzt A1 + A3 maximal.
@@ -39,7 +39,7 @@ Jede Slice ist unabhängig ausführbar:
 ```
 ## Slice <n>: <scope-bezeichnung>  (~−<x> Zeilen)
 **Scope:** <pfade>
-**ponytail lens (why each exists):** je Item: delete | earns-its-place-simplify
+**existence-first lens (why each exists):** je Item: delete | earns-its-place-simplify
 **Findings (ranked, biggest cut first):**
 | tag | what to cut | replacement | path:line | repo-wide pre-delete grep (muss 0 / erwartet) | freshness |
 |-----|-------------|-------------|-----------|-----------------------------------------------|-----------|
@@ -61,7 +61,7 @@ Jede Slice ist unabhängig ausführbar:
 ## Betroffene Dateien (Orientierung)
 
 - **SKILL.md:** Phase 0 (Mode-Routing um `audit` + `--audit`; `argument-hint`), Audit-Branch in Phase 1+2 (analog zur fix-Verzweigung), Phase-4-Notiz (dead-claim-Verifikation), Phase-7-Notiz (slice-commit), Modes-Section.
-- **reference.md:** neuer Abschnitt **„Audit mode (ponytail lens)"** (AUDIT.md/Slice-Format, Tag-Taxonomie, do-NOT-touch, Git-History-Freshness, repo-weiter grep, Verify-Gate); Querverweis auf „Code mandate" (A3) + „Review rubric" (adversarial).
+- **reference.md:** neuer Abschnitt **„Audit mode"** (AUDIT.md/Slice-Format, Tag-Taxonomie, do-NOT-touch, Git-History-Freshness, repo-weiter grep, Verify-Gate); Querverweis auf „Code mandate" (A3) + „Review rubric" (adversarial).
 - **CHANGELOG.md** (Version später).
 
 ## Tests

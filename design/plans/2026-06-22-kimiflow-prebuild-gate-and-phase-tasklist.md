@@ -378,7 +378,7 @@ git commit -m "feat: native phase task-list widget in Phase 0 (complements STATE
 
 ---
 
-### Task 4: A3 — caller-verified deletion gate (ponytail)
+### Task 4: A3 — caller-verified deletion gate
 
 **Files:**
 - Modify: `reference.md` ("Code mandate" + "Review rubric")

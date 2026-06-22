@@ -2,7 +2,7 @@
 
 > **For implementers:** execute this plan task-by-task; steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a third kimiflow mode — `audit` (cleanup via the ponytail lens) — that finds over-engineered/dead code in a bounded target, presents tagged slices for approval, and executes them slice-by-slice with a per-slice verify gate.
+**Goal:** Add a third kimiflow mode — `audit` (cleanup via the existence-first lens) — that finds over-engineered/dead code in a bounded target, presents tagged slices for approval, and executes them slice-by-slice with a per-slice verify gate.
 
 **Architecture:** Pure prompt feature — edits to `SKILL.md` (mode routing + phase branches) and `reference.md` (the "Audit mode" section: slice format, tags, safety). No new runtime code. It REUSES, and therefore DEPENDS ON, two features from the prior batch: **A1** (pre-build summary gate — shows the slice list for approval) and **A3** (caller-verified deletion gate — the grep==0 core of every `delete` slice).
 
@@ -46,7 +46,7 @@ argument-hint: <feature-or-bug> [--fix] [--audit <path>] [--prepare] [--quiet|--
 In the Modes section, after the `Feature or fix:` bullet, add:
 
 ```
-- **Audit / cleanup mode:** kimiflow detects cleanup intent ("remove dead code", "over-engineering audit", "entschlacken", "clean up") and runs the **ponytail lens** over a **required target path**. Force with **`/kimiflow --audit <path>`**. Staged: it finds tagged slices, shows them for approval (the Phase-4 summary gate), then executes them one slice = one commit with a per-slice verify gate. → reference.md "Audit mode".
+- **Audit / cleanup mode:** kimiflow detects cleanup intent ("remove dead code", "over-engineering audit", "entschlacken", "clean up") and runs the **existence-first lens** over a **required target path**. Force with **`/kimiflow --audit <path>`**. Staged: it finds tagged slices, shows them for approval (the Phase-4 summary gate), then executes them one slice = one commit with a per-slice verify gate. → reference.md "Audit mode".
 ```
 
 - [ ] **Step 3: Phase 0 step 2 — route audit**
@@ -98,7 +98,7 @@ In `SKILL.md` Phase 2, after the `**Fix → understand & diagnose**` block (ends
 
 ```
 **Audit → find the fat** (read-only, evidence-based):
-2. **Survey the target** (`Explore` agent, input `AUDIT-INTENT.md`): map what exists and why. For each non-trivial item ask the **ponytail Rung-1** question — not "can we dedupe" but "should this exist at all".
+2. **Survey the target** (`Explore` agent, input `AUDIT-INTENT.md`): map what exists and why. For each non-trivial item ask the **existence-first rule** question — not "can we dedupe" but "should this exist at all".
 3. **Tag findings** `yagni`/`delete`/`shrink`/`stdlib`, each with `path:line` + replacement + a **repo-wide pre-delete grep** (`grep -rn` over `src` + tests, must return 0 for `delete`) + a **git-history-freshness** note (`git log -1` on the symbol — recently-touched zero-caller = likely WIP → downgrade).
 4. **Synthesis → `AUDIT.md`**: self-contained **slices** ranked biggest-cut-first, plus a **do-NOT-touch** list (looks removable, but earns its place + why). Structure: → reference.md "Audit mode". **Caller-grep is a MINIMUM** — dynamic/reflective refs are a blind spot, so tests + adversarial verification (phase 4) are the backstop.
 ```
@@ -134,7 +134,7 @@ git commit -m "feat: audit-mode phase branches (scope, find-the-fat, dead-claim 
 
 ---
 
-### Task 3: reference.md — "Audit mode (ponytail lens)" section
+### Task 3: reference.md — "Audit mode" section
 
 **Files:**
 - Modify: `reference.md` (new section after "Fix mode")
@@ -149,11 +149,11 @@ In `reference.md`, immediately after the `## Fix mode (diagnosis) (Phase 1–2)`
 ````
 ---
 
-## Audit mode (ponytail lens) (Phase 1–7)
+## Audit mode (Phase 1–7)
 
 A third mode (beside feature/fix) to safely shrink over-engineered / dead code in a **bounded target**. **Staged:** find → report → approve → execute. **Engine unchanged**; reuses the deletion gate ("Code mandate"), adversarial reviewers ("Review rubric"), the Phase-4 summary gate, and atomic commits.
 
-**Core rule (ponytail Rung-1):** for each item ask not "can we dedupe" but **"should this exist at all?"** — resolves to *delete* or *earns-its-place → simplify*. Every cut is **caller-verified at execution time**; on any doubt, downgrade or skip — never delete on assumption.
+**Core rule (existence-first rule):** for each item ask not "can we dedupe" but **"should this exist at all?"** — resolves to *delete* or *earns-its-place → simplify*. Every cut is **caller-verified at execution time**; on any doubt, downgrade or skip — never delete on assumption.
 
 **Tags:** `yagni` (speculative architecture) · `delete` (dead, zero-caller) · `shrink` (dedupe, behavior preserved) · `stdlib` (hand-rolled → standard library, edge-cases preserved).
 
@@ -168,7 +168,7 @@ A third mode (beside feature/fix) to safely shrink over-engineered / dead code i
 ```
 ## Slice <n>: <scope>  (~−<x> lines)
 **Scope:** <paths>
-**ponytail lens (why each exists):** per item — delete | earns-its-place→simplify
+**existence-first lens (why each exists):** per item — delete | earns-its-place→simplify
 **Findings (ranked):**
 | tag | what to cut | replacement | path:line | repo-wide pre-delete grep (→ 0 / expected) | freshness |
 **do-NOT-touch:** <symbol> — <why it stays despite the grep suspicion>
@@ -181,7 +181,7 @@ A third mode (beside feature/fix) to safely shrink over-engineered / dead code i
 
 - [ ] **Step 2: Verify**
 
-Run: `grep -c "Audit mode (ponytail lens)" reference.md` → 1. Run: `grep -c "Rung-1" reference.md` → 1. Run: `grep -nE "yagni|stdlib" reference.md | head` → matches present.
+Run: `grep -c "Audit mode" reference.md` → 1. Run: `grep -c "existence-first" reference.md` → 1. Run: `grep -nE "yagni|stdlib" reference.md | head` → matches present.
 
 - [ ] **Step 3: Commit**
 
@@ -212,7 +212,7 @@ In `CHANGELOG.md`, after the intro line and before the latest `## 0.1.x`, insert
 
 ### Added
 - **Audit / cleanup mode** — a third mode (`/kimiflow --audit <path>` or auto-detected) that runs the
-  ponytail lens over a bounded target: finds tagged slices (`yagni`/`delete`/`shrink`/`stdlib`) with
+  existence-first lens over a bounded target: finds tagged slices (`yagni`/`delete`/`shrink`/`stdlib`) with
   repo-wide caller-greps and git-history-freshness, presents them for approval (Phase-4 summary gate),
   then executes one slice = one commit with a per-slice verify gate. Caller-grep is a documented
   MINIMUM; tests + do-NOT-touch + adversarial "refute the cut" verification are the backstop. Engine unchanged.
@@ -243,6 +243,6 @@ git commit -m "release: 0.1.4 (audit/cleanup mode)"
 
 **2. Placeholder scan** — no TBD/TODO; all insert blocks literal. The version number in Task 4 is intentionally "confirm then-current +1" because this ships after the prior batch — not a placeholder gap. ✓
 
-**3. Consistency** — tags `yagni|delete|shrink|stdlib`, file names `AUDIT-INTENT.md`/`AUDIT.md`, "one slice = one commit", "repo-wide grep", "Rung-1", "refute the cut" identical across Tasks 1–4 and the SKILL.md/reference.md edits. Dependency on A1/A3 stated in Global Constraints. ✓
+**3. Consistency** — tags `yagni|delete|shrink|stdlib`, file names `AUDIT-INTENT.md`/`AUDIT.md`, "one slice = one commit", "repo-wide grep", "existence-first", "refute the cut" identical across Tasks 1–4 and the SKILL.md/reference.md edits. Dependency on A1/A3 stated in Global Constraints. ✓
 
 **4. Known non-mechanical parts** — audit mode is orchestrator-behavioral; the only *mechanical* enforcement is the reused A3 grep gate. No unit tests here (the prior batch tests A1/A3); audit behavior is verified by UAT. Acknowledged, not a gap.

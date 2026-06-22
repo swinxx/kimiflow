@@ -1,7 +1,7 @@
 # Design: kimiflow — Pre-Build-Summary-Gate + native Phasen-Tasklist
 
 - **Datum:** 2026-06-22
-- **Status:** Design freigegeben (brainstorming) → bereit für `writing-plans`
+- **Status:** Design freigegeben
 - **Sprache:** Prosa Deutsch (Review-Sprache des Users); Code-Identifier, Pfade und Section-Namen bleiben Englisch (Konsistenz mit SKILL.md/reference.md).
 
 ## Problem / Ziel
@@ -13,7 +13,7 @@ Zwei UX-Lücken in kimiflow:
 
 **Ziel:** (A) ein projekt-lokal konfigurierbarer Pre-Build-Summary-Gate, (B) eine native Phasen-Tasklist. **Beide ändern die Engine NICHT** (Gates, Artefakte, Evidenz, Subagenten, Thresholds bleiben identisch) — reine Kontroll-/Sichtbarkeits-Ergänzungen.
 
-## Entscheidungen (im Brainstorming festgelegt)
+## Entscheidungen
 
 - **A-Platzierung:** neuer Schritt am Ende von Phase 4 (Plan ist da bereits vom Plan-Gate vetted), vor Phase 5. In `--prepare` ist es genau der Stop, der dort ohnehin passiert → vereinheitlicht.
 - **A-Schalter:** **projekt-lokal** `.kimiflow/build-gate` mit Inhalt `on` oder `off`, **default `on`**.
@@ -95,15 +95,15 @@ Zwei UX-Lücken in kimiflow:
 - Konfigurierbare Summary-Sektionen / Styling der Tasklist.
 - Änderung an Qualitäts-Gates, Thresholds oder Engine-Verhalten.
 
-## Runde-2-Adaptionen (ponytail)
+## Runde-2-Adaptionen
 
 In diesen Batch aufgenommen (kleine, qualitäts-neutrale Skill-Edits):
 
-- **A3 — Caller-verified deletion gate (ponytail).** Jede Code-Löschung trägt einen Beleg von **null lebenden Callern** — ein `grep`/Suchlauf über `src` (und Tests), der nichts zurückgibt, der Änderung beigelegt. Löschung ohne Beleg = **BLOCKER** im Code-Review. Überlebt etwas den Grep, hält ein Reviewer es aber für load-bearing → auf eine kurze **do-NOT-touch**-Liste mit Begründung statt löschen. Erweitert Surgical-changes von „toten Code nennen" zu „mechanisch belegt löschen"; Anti-Halluzination für Löschungen.
+- **A3 — Caller-verified deletion gate.** Jede Code-Löschung trägt einen Beleg von **null lebenden Callern** — ein `grep`/Suchlauf über `src` (und Tests), der nichts zurückgibt, der Änderung beigelegt. Löschung ohne Beleg = **BLOCKER** im Code-Review. Überlebt etwas den Grep, hält ein Reviewer es aber für load-bearing → auf eine kurze **do-NOT-touch**-Liste mit Begründung statt löschen. Erweitert Surgical-changes von „toten Code nennen" zu „mechanisch belegt löschen"; Anti-Halluzination für Löschungen.
 - **A4 — `Consumes:`/`Produces:`-Interface-Block in PLAN.md-Tasks.** Jeder Plan-Task nennt die Signaturen, die er von früheren Tasks nutzt (`Consumes:`) und die exakten Namen/Typen, auf die spätere bauen (`Produces:`). Ein worktree-Implementer sieht nur seinen Task — so lernt er Nachbar-Signaturen ohne geteilten Kontext.
 - **A5 — Considered alternatives bei `large`.** Bei `large`-Scope hält RESEARCH.md/PLAN.md 2–3 erwogene Ansätze + den Trade-off fest, der den gewählten begründet. small/trivial ausgenommen.
 
-**In eigene Spec ausgelagert (unabhängiges Subsystem):** **Audit/Cleanup-Modus** — ein dritter Modus neben feature/fix mit der vollen ponytail lens (why-does-this-exist → caller-verified Slices → do-NOT-touch-Listen → `yagni`/`delete`/`shrink`/`stdlib`-Tags → Verify-Gate pro Slice). Zu groß zum Einfalten; eigenes Brainstorming.
+**In eigene Spec ausgelagert (unabhängiges Subsystem):** **Audit/Cleanup-Modus** — ein dritter Modus neben feature/fix mit der vollen existence-first lens (why-does-this-exist → caller-verified Slices → do-NOT-touch-Listen → `yagni`/`delete`/`shrink`/`stdlib`-Tags → Verify-Gate pro Slice). Zu groß zum Einfalten; eigenes Design.
 
 **Verworfen (YAGNI):** Visual Companion (kimiflow ist nicht UI-Design-fokussiert); ein separates Design-Doc-für-`large` (der Pre-Build-Gate liefert den Review-Checkpoint schon).
 

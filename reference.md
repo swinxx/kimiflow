@@ -34,7 +34,7 @@ Goal: shared understanding BEFORE research/plan. kimiflow runs the interview **i
 ## Open questions        ([NEEDS CLARIFICATION: …] — max 3, only what truly blocks)
 ```
 
-**Gate:** show INTENT.md, ask "Does this match?", continue only after explicit OK.
+**Gate:** show a **≤3-line summary of INTENT.md + its path** (do NOT paste the whole file), ask "Does this match?", continue only after explicit OK.
 
 ---
 
@@ -180,7 +180,7 @@ AC-1 — When an empty search string is sent, the API shall return HTTP 400.
 
 ## Verification (goal-backward) (Phase 6)
 
-Run each criterion's method and show real output. Then verify **goal-backward** — "task completion ≠ goal achievement":
+Run each criterion's method and show the command + the decisive output line(s) (not full logs). Then verify **goal-backward** — "task completion ≠ goal achievement":
 
 - For each criterion's artifact, check three levels: **Exists** (the code is there) · **Substantive** (real logic, not a stub/placeholder) · **Wired** (imported AND actually used on a real path). Mark ✓VERIFIED / ⚠ORPHANED / ✗STUB / ✗MISSING. A criterion is met only at **Wired**.
 - **Regression:** existing/affected test suite green.

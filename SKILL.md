@@ -21,7 +21,13 @@ You are the **orchestrator**. Run the phases below as a state machine, delegate 
 ## Core principles (apply in ALL phases)
 
 - **Language: reply in the user's language.** Detect the language the user writes in and use it for everything they see and for the artifacts they review (INTENT/PROBLEM/PLAN/…). These English instructions do NOT dictate the conversation language.
-- **Terse output.** Keep your own visible output minimal: a short status line per phase, gate verdicts, and the evidence the user must see. No re-explaining what a subagent is about to do, no prose restating an artifact the user can already read, no recap tables unless asked. Gates, findings and evidence stay — the narration around them goes.
+- **Terse output (HARD RULE — governs every phase; this is where runs bloat).** Your visible output is **control-plane only**: a phase line, the gate verdict, the decisive evidence, and a question when you need an answer. Concretely:
+  - **(a) One-line phase announcements** — marker + name + ≤1 clause. Never a paragraph.
+  - **(b) NEVER paste a full artifact into chat** (INTENT/PROBLEM/RESEARCH/DIAGNOSIS/PLAN/ACCEPTANCE). Write it to its file; show a **≤3-line summary + the path**. The user opens the file for detail. (This is the #1 volume leak.)
+  - **(c) Gate verdict = ONE line** — e.g. `gate open · open BLOCKER/HIGH: 0`. No narrative; the reasoning lives in `REVIEW.md`.
+  - **(d) Evidence = the command + only the decisive output line(s)**, never a full log dump.
+  - **(e) No STATE narration in chat, no recap tables, no restating what a subagent will do or just did.**
+  - **Budget: ≤~6 lines of your own prose per phase**, outside the required artifact-summary / decisive-evidence. **Exempt:** the Phase-7 commit-gate `git diff --staged` and direct answers the user asked for. Gates, findings and evidence stay — the volume around them goes.
 - **Phase colors — announce each phase with its marker.** As you enter a phase, prefix the announcement with its colored marker so the run reads at a glance: ⚪ 0 Setup · 🔵 1 Clarify · 🟣 2 Understand · ⚫ 3 Plan · 🟡 4 Plan-gate · 🟠 5 Implement · 🟤 6 Verify · 🟢 7 Review/Commit (the headers below carry the same marker). Keep that phase's marker on its STATE updates and status lines. (The main output is markdown — the emoji IS the color channel; there is no ANSI text color.)
 - **Self-contained — the skill is the authority.** Every gate, threshold and acceptance standard lives here (+ reference.md), never in a personal/global `CLAUDE.md`. kimiflow runs identically regardless of how — or whether — a `CLAUDE.md` exists. The only `CLAUDE.md` kimiflow consults is the **project's** one, as an optional conventions hint in Phase 2 — never as a source of gate criteria, numeric scores, or audit thresholds. Don't borrow gate rules from any `CLAUDE.md` or attribute a kimiflow gate to one.
 - **Simplicity-first.** Minimal code/plan for the problem. No speculative abstractions, no features beyond the request. Complexity scales with the project, not with imagination.
@@ -104,7 +110,7 @@ Read **reference.md → "Review rubric"**.
 
 Run each check, show real output, prove the goal — details: **reference.md → "Verification"**.
 
-- **Run each criterion's method** and **show the real output** (command + result).
+- **Run each criterion's method** and **show the command + the decisive result line(s)** — not full logs.
 - **Goal-backward:** for each criterion's artifact check **Exists / Substantive / Wired** (imported AND used) — "task done ≠ goal achieved"; catch stubs/orphans that pass superficially.
 - **Fix mode (mandatory):** the reproduction no longer fails.
 - **Regression:** existing/affected test suite green.

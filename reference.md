@@ -169,7 +169,7 @@ A third mode (beside feature/fix) to safely shrink over-engineered / dead code i
 **Tags:** `yagni` (speculative architecture) · `delete` (dead, zero-caller) · `shrink` (dedupe, behavior preserved) · `stdlib` (hand-rolled → standard library, edge-cases preserved).
 
 **Safety (non-negotiable):**
-- **Caller-greps run repo-wide** (`src` + tests), never only the target — a symbol in the target can be called from anywhere.
+- **Caller-greps run repo-wide** (the repo's source + tests), never only the target — a symbol in the target can be called from anywhere.
 - **Caller-grep is a MINIMUM:** dynamic dispatch / reflection / string-keyed lookup escape it → tests-green + a do-NOT-touch list + the Phase-4 "refute the cut" lens are the backstop.
 - **Git-history-freshness:** weigh a zero-caller symbol by `git log` — recently touched = likely WIP (downgrade); import removed long ago = confidently dead.
 
@@ -309,7 +309,7 @@ With that file present, the hook runs the command on stop; on failure it blocks 
 - **Scales with the project:** prototype ≠ enterprise layers; a hot path needs performance awareness.
 - **Efficient & elegant:** readable, no needless recomputation in hot paths, clear single-purpose units.
 - **Surgical:** touch only what the request demands; clean up your own orphans; leave foreign code alone.
-- **Deletions are caller-verified (mechanical).** Removing code requires a recorded proof of **zero live callers** — a `grep`/search over `src` (and tests) that returns none, attached to the change. A deletion without that proof is a **code-review BLOCKER**. If something survives the grep but a reviewer judges it load-bearing, record it on a short **do-NOT-touch** list with the reason instead of deleting (anti-hallucination for deletions — a wrong "dead" claim is worse than a missed one).
+- **Deletions are caller-verified (mechanical).** Removing code requires a recorded proof of **zero live callers** — a `grep`/search over the repo's source (and tests) that returns none, attached to the change. A deletion without that proof is a **code-review BLOCKER**. If something survives the grep but a reviewer judges it load-bearing, record it on a short **do-NOT-touch** list with the reason instead of deleting (anti-hallucination for deletions — a wrong "dead" claim is worse than a missed one).
 
 ---
 

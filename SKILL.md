@@ -86,7 +86,7 @@ Goal: kimiflow must truly understand the affected code before planning — evide
 
 **Audit → find the fat** (read-only, evidence-based):
 2. **Survey the target** (`Explore` agent, input `AUDIT-INTENT.md`): map what exists and why. For each non-trivial item ask the **ponytail Rung-1** question — not "can we dedupe" but "should this exist at all".
-3. **Tag findings** `yagni`/`delete`/`shrink`/`stdlib`, each with `path:line` + replacement + a **repo-wide pre-delete grep** (`grep -rn` over `src` + tests, must return 0 for `delete`) + a **git-history-freshness** note (`git log -1` on the symbol — recently-touched zero-caller = likely WIP → downgrade).
+3. **Tag findings** `yagni`/`delete`/`shrink`/`stdlib`, each with `path:line` + replacement + a **repo-wide pre-delete grep** (`grep -rn` over the repo's source + tests, must return 0 for `delete`) + a **git-history-freshness** note (`git log -1` on the symbol — recently-touched zero-caller = likely WIP → downgrade).
 4. **Synthesis → `AUDIT.md`**: self-contained **slices** ranked biggest-cut-first, plus a **do-NOT-touch** list (looks removable, but earns its place + why). Structure: → reference.md "Audit mode". **Caller-grep is a MINIMUM** — dynamic/reflective refs are a blind spot, so tests + adversarial verification (phase 4) are the backstop.
 
 **Always last — vault-save** (automatic — only if a vault MCP is connected; else skip + note in STATE) per → reference.md "Vault conventions". Report the path. Don't save trivial lookups.

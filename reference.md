@@ -34,8 +34,7 @@ Tunes **how much the orchestrator prints** — nothing else.
 
 **Helper — all reads AND writes go through one tested script** (`hooks/resolve-verbosity.sh`, invoked as `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/resolve-verbosity.sh`; unit-tested by `hooks/test-resolve-verbosity.sh`):
 - `get [--flag <level>]` → resolves and echoes the level (precedence above).
-- `origin [--flag <level>]` → echoes the winning source `flag|project|global|default`.
-- `onboard-check [--flag <level>]` → echoes `ASK` iff `origin`==`default` (nothing set anywhere), else `SKIP`. Moves the first-run "is it already set?" decision out of the orchestrator's judgment and into the script, so onboarding can't misfire on an already-configured project.
+- `onboard-check [--flag <level>]` → echoes `ASK` iff nothing is set anywhere (the winning source is the built-in default), else `SKIP`. Moves the first-run "is it already set?" decision out of the orchestrator's judgment and into the script, so onboarding can't misfire on an already-configured project.
 - `set <project|global> <level>` → validates, `mkdir -p`s the parent, writes, **verifies the write** (stderr + exit 1 on failure — never a false success), echoes the path. A garbage level/scope is rejected without writing.
 
 **Invocations (orchestrator behavior):**

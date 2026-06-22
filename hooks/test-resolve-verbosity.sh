@@ -63,19 +63,9 @@ if run set bogus verbose >/dev/null 2>&1; then fail "test_set_invalid_scope_reje
 reset; rm -rf "$FAKE_HOME"; mkdir -p "$FAKE_HOME"; : > "$FAKE_HOME/.claude"   # .claude is a FILE
 if run set global verbose >/dev/null 2>&1; then fail "test_set_failure_exit1"; else pass "test_set_failure_exit1"; fi
 
-# --- AC-12: origin reporting ---
-reset
-assert_eq "$(run origin)" "default" "test_origin_default"
-reset; set_project balanced
-assert_eq "$(run origin)" "project" "test_origin_project"
-assert_eq "$(run origin --flag verbose)" "flag" "test_origin_flag"
-reset; set_global verbose
-assert_eq "$(run origin)" "global" "test_origin_global"
-
 # --- AC-13: flag/get never persists ---
 reset
 run --flag verbose >/dev/null
-run origin --flag verbose >/dev/null
 if [ -f "$PROJ/.kimiflow/verbosity" ] || [ -f "$FAKE_HOME/.claude/kimiflow/verbosity" ]; then
   fail "test_flag_no_persist"
 else
@@ -87,7 +77,7 @@ reset
 out="$(run --flag)"; rc=$?
 if [ "$rc" -eq 0 ] && [ "$out" = "balanced" ]; then pass "test_flag_missing_value_degrades"; else fail "test_flag_missing_value_degrades (rc=$rc out='$out')"; fi
 
-# --- AC-14: onboard-check → ASK only when nothing is set (origin==default), else SKIP ---
+# --- AC-14: onboard-check → ASK only when nothing is set anywhere, else SKIP ---
 reset
 assert_eq "$(run onboard-check)" "ASK" "test_onboard_ask_when_unset"
 reset; set_project quiet
@@ -96,7 +86,7 @@ reset; set_global verbose
 assert_eq "$(run onboard-check)" "SKIP" "test_onboard_skip_global_set"
 reset
 assert_eq "$(run onboard-check --flag verbose)" "SKIP" "test_onboard_skip_with_flag"
-# onboard-check is read-only — like get/origin it must never persist anything
+# onboard-check is read-only — like get it must never persist anything
 reset
 run onboard-check >/dev/null
 if [ -f "$PROJ/.kimiflow/verbosity" ] || [ -f "$FAKE_HOME/.claude/kimiflow/verbosity" ]; then

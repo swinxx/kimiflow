@@ -6,11 +6,10 @@
 #
 # Usage:
 #   resolve-verbosity.sh [get] [--flag <level>]      -> echo resolved level word
-#   resolve-verbosity.sh origin   [--flag <level>]   -> echo winning source: flag|project|global|default
-#   resolve-verbosity.sh onboard-check [--flag <level>] -> echo ASK iff origin==default (nothing set), else SKIP
+#   resolve-verbosity.sh onboard-check [--flag <level>] -> echo ASK iff nothing set anywhere, else SKIP
 #   resolve-verbosity.sh set <project|global> <level> -> validate, mkdir -p, write, verify, echo path
 #
-# Precedence (get/origin): flag > project (.kimiflow/verbosity) > global (~/.claude/kimiflow/verbosity) > balanced
+# Precedence (get): flag > project (.kimiflow/verbosity) > global (~/.claude/kimiflow/verbosity) > balanced
 # Self-contained rule: only a single valid level word is ever read/written — a
 # gate/cost line placed in a file is not a valid level and is ignored.
 set -u
@@ -44,7 +43,7 @@ read_level() {
 
 mode="get"
 case "${1:-}" in
-  get|origin|set|onboard-check) mode="$1"; shift ;;
+  get|set|onboard-check) mode="$1"; shift ;;
 esac
 
 # ---- set <project|global> <level> ----
@@ -79,7 +78,7 @@ if [ "$mode" = "set" ]; then
   exit 0
 fi
 
-# ---- get / origin : parse optional --flag <level>, robust to missing/garbage ----
+# ---- get / onboard-check : parse optional --flag <level>, robust to missing/garbage ----
 flag=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -102,11 +101,10 @@ fi
 
 # onboard-check: turn the precedence decision into an imperative token, so the
 # orchestrator never has to evaluate "is it set?" itself — ASK only when nothing
-# is set anywhere (origin==default); any project/global config OR a one-off flag → SKIP.
+# is set anywhere (winning source is the built-in default); any project/global config
+# OR a one-off flag → SKIP.
 if [ "$mode" = "onboard-check" ]; then
   [ "$src" = "default" ] && printf 'ASK\n' || printf 'SKIP\n'
-elif [ "$mode" = "origin" ]; then
-  printf '%s\n' "$src"
 else
   printf '%s\n' "$level"
 fi

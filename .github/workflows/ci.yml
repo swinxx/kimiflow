@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax (bash -n) — hard gate
+        run: |
+          for f in hooks/*.sh; do
+            echo "checking $f"
+            bash -n "$f"
+          done
+
+      - name: Validate JSON — hard gate
+        run: |
+          jq -e . hooks/hooks.json > /dev/null
+          jq -e . .claude-plugin/plugin.json > /dev/null
+
+      - name: ShellCheck (informational)
+        run: shellcheck hooks/*.sh || true

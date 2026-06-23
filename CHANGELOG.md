@@ -2,6 +2,29 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.15
+
+Make STATE-persistence **enforced**, not a prose ask the orchestrator can rationalize past — closing a
+gap found when a "lean" doc run skipped `.kimiflow/<slug>/STATE.md` and lost resumability.
+
+### Added
+- **`state-gate` hook** (`hooks/state-gate.sh`, PreToolUse/Bash). Intercepts the review-gate resolver
+  call (`resolve-review-gate.sh .kimiflow/<slug>/findings …`) and **denies it fail-closed unless that
+  run's `STATE.md` exists and is non-empty** — so no gate verdict (→ no commit) without persisted run
+  state. The safety-critical `resolve-review-gate.sh` is **untouched** (separate hook, not a resolver
+  edit). Auto-active only in kimiflow repos; needs no jq; unit-tested (`hooks/test-state-gate.sh`, 11
+  cases incl. a no-jq path); wired into `hooks.json` + smoke-test. **Honest limit:** catches every run
+  that reaches a gate (everything that commits), not a `--prepare`/`trivial` run that stops before any
+  gate — those are covered by the prose + eval below.
+- **Behavioral-eval scenario 11** (`evals/scenarios/11-state-persistence.md`): does the orchestrator
+  still persist `STATE.md` under "keep it in chat to stay lean" pressure?
+
+### Changed
+- **SKILL.md "Persist phase progress"** — explicit negation: not optional, not terse-trimmable;
+  "small / lean / doc-only run" is not an exemption (only `trivial` runs without the loop). Plus a
+  **"Narration ≠ persistence"** clause on the terse-output rule: terse suppresses *talking about* state
+  in chat, it never removes writing `STATE.md` / the phase artifacts to disk.
+
 ## 0.1.14
 
 A review-contract sharpening: reviewers judge against intent, acceptance, the diff and actual behavior

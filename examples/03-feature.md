@@ -113,8 +113,9 @@ Risks ……….….. localStorage in private mode/SSR (guarded); FOUC (inline s
 Artifacts ……… .kimiflow/dark-mode-toggle/{INTENT,RESEARCH,PLAN,ACCEPTANCE}.md
 ```
 
-✋ **STOP — "Approve to build, or what to change?"** → approve → Phase 5. (Headless / no answer → does
-**not** build: behaves like `--prepare`, emits `--resume`.)
+✋ **STOP — "Approve to build, change something, or defer to backlog?"** → approve → Phase 5. (Defer →
+parks the finished plan as `Status: backlog`, emits `--resume`. Headless / no answer → does **not** build:
+behaves like `--prepare`, emits `--resume`.)
 
 ### 🟠 Phase 5 — Implement (TDD)
 

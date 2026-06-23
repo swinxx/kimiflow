@@ -2,6 +2,28 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.18
+
+Close a second bypass class in `commit-secret-gate`'s `-a`/`--all` detection and make the README's
+promise honest. Found by an external review of 0.1.17. **Hook + tests + docs only.**
+
+### Fixed
+- **`-a` detection bypass via a shell metachar hidden from the parser** (`hooks/commit-secret-gate.sh`).
+  The commit args were split on `;`/`&`/`|` **before** quotes were stripped, so a metachar inside the
+  `-m` message (`git commit -m "a; b" -a`) — or a `\`+newline line continuation — truncated the
+  extraction and dropped the trailing `-a`, letting a tracked+modified secret commit unblocked. The
+  hook now **joins backslash-newline continuations and strips quoted spans first, then** splits and
+  detects `-a`/`--all`. Safe because this branch reads only flags, never pathspec/filenames. Unit
+  tests added for quoted `;`/`&`/`|`, the `--all` variant, and a newline continuation (78 cases).
+
+### Changed
+- **Honest residuals, in docs and as locked tests** (`README.md`, `reference.md`,
+  `hooks/test-commit-secret-gate.sh`). The README no longer implies it blocks "any" secret commit; it
+  now names the **backstop, not complete secret protection** framing and the known gaps. Documented +
+  test-locked as known ALLOW (regex ≠ shell parser): an `env X=y`/`sudo` prefix (defeats the
+  command-position anchor, gate-wide), an **escaped quote** in the message, and an explicit **pathspec
+  commit** (`git commit <path>`). A pre-existing literal-tab-after-`git` gap is also known (LOW).
+
 ## 0.1.17
 
 Close a real bypass in the `commit-secret-gate` hook and document its boundaries honestly. The gate

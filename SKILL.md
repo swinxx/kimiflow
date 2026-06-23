@@ -1,7 +1,7 @@
 ---
 name: kimiflow
-description: "Feature & bug-fix loop — clarify (plain language) → understand & research / diagnose (memory-first) → plan with testable acceptance criteria → plan-gate (independent reviewers, binary, cap 3) → implement → verify against specs → code-review → commit (stops first). Fix mode proves the problem, verifies the root cause, and researches the correct fix BEFORE fixing. Modes: full run · --explore · --prepare · --resume <slug> · --fix · --audit <path>. Manual only via /kimiflow."
-disable-model-invocation: true
+description: "Feature & bug-fix loop — clarify (plain language) → understand & research / diagnose (memory-first) → plan with testable acceptance criteria → plan-gate (independent reviewers, binary, cap 3) → implement → verify against specs → code-review → commit (stops first). Fix mode proves the problem, verifies the root cause, and researches the correct fix BEFORE fixing. Modes: full run · --explore · --prepare · --resume <slug> · --fix · --audit <path>. OPT-IN: invoke ONLY when the user explicitly asks for kimiflow or its loop (e.g. \"with kimiflow\", \"run kimiflow\", \"build this through the gates\", or the /kimiflow command). Do NOT auto-trigger on ordinary feature/bug/refactor requests — the user opts in. Also slash-invocable via /kimiflow."
+disable-model-invocation: false
 argument-hint: <feature-or-bug> [--fix] [--audit <path>] [--explore] [--prepare] [--quiet|--verbose] [--set-verbosity <level>] [--settings]  ·  --resume <slug>
 ---
 

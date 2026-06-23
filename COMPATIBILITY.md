@@ -21,7 +21,7 @@ loop still runs.
 | Plugin manifest `.claude-plugin/plugin.json` (`name`/`description`/`version`/`license`/`author`) | plugin packaging + version source of truth | **Load-bearing** — schema/field rename → plugin won't load |
 | Marketplace manifest `.claude-plugin/marketplace.json` | install / listing | **Load-bearing** — schema change → install fails |
 | Skill frontmatter `name` / `description` / `argument-hint` + `$ARGUMENTS` substitution | `SKILL.md` header + `## Modes` | **Load-bearing** — substitution/field change → args & routing break |
-| `disable-model-invocation: true` | `SKILL.md` frontmatter (manual-only `/kimiflow`) | **Load-bearing** — semantics change → kimiflow could auto-trigger unprompted |
+| `disable-model-invocation: false` | `SKILL.md` frontmatter (model-invocable; **opt-in/on-request** policy lives in the `description`, not a hard flag) | **Load-bearing** — if forced back to `true`, the model can't launch kimiflow on request; the "only when asked, never unprompted" guard is **soft** (description-guided judgment), not mechanically enforced |
 | Slash invocation `/kimiflow` | user entry point | **Load-bearing** — command-routing change |
 | Hook event `PreToolUse` (matcher `Bash`) | `hooks/hooks.json` → `commit-secret-gate.sh` | **Load-bearing** — event/matcher rename → secret gate silently stops gating |
 | Hook event `Stop` | `hooks/hooks.json` → `test-gate.sh` | **Load-bearing** — event rename → test-gate silently stops gating |
@@ -49,7 +49,8 @@ Run on every Claude Code upgrade (and at each kimiflow release):
 3. **Hooks fire installed** — in a repo with a `.kimiflow/` dir, confirm `commit-secret-gate.sh` blocks
    a `git add .` and the `Stop` test-gate engages (path resolves through `${CLAUDE_PLUGIN_ROOT}`).
 4. **One trivial end-to-end** — `/kimiflow <tiny fix>`: the Phase-0 task widget appears, the commit-gate
-   STOPs for explicit OK, and `disable-model-invocation` still holds (no auto-trigger).
+   STOPs for explicit OK; and the opt-in policy holds — kimiflow launches when asked ("with kimiflow")
+   but does not fire unprompted on an unrelated request (soft, description-guided — not a hard flag).
 5. **Re-stamp** — update the "Last verified against" line above with the new `claude --version`.
 
 Anything that fails here is an upstream-compatibility break — record it in the CHANGELOG and pin or

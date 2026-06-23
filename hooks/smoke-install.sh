@@ -30,7 +30,9 @@ fm="$(awk 'NR==1 && $0=="---"{f=1;next} f && $0=="---"{exit} f' "$ROOT/SKILL.md"
 printf '%s\n' "$fm" | grep -qE '^name:[[:space:]]*kimiflow'                 && ok "name: kimiflow"                       || bad "name missing/wrong"
 printf '%s\n' "$fm" | grep -qE '^description:'                              && ok "description present"                  || bad "description missing"
 printf '%s\n' "$fm" | grep -qE '^argument-hint:'                            && ok "argument-hint present"                || bad "argument-hint missing"
-printf '%s\n' "$fm" | grep -qE '^disable-model-invocation:[[:space:]]*true' && ok "disable-model-invocation: true (no auto-trigger)" || bad "disable-model-invocation not true"
+# Model-invocation is ENABLED (opt-in, on-request — the "invoke only when asked" policy lives in the
+# description, not a hard flag). It must NOT be `true`, or the model can't launch kimiflow on request.
+if printf '%s\n' "$fm" | grep -qE '^disable-model-invocation:[[:space:]]*true'; then bad "disable-model-invocation: true → model can't launch kimiflow on request"; else ok "model-invocable (disable-model-invocation not true) — opt-in/on-request per description"; fi
 # user-invocable defaults true; it must NOT be false or /kimiflow vanishes from the slash menu.
 if printf '%s\n' "$fm" | grep -qE '^user-invocable:[[:space:]]*false'; then bad "user-invocable: false → /kimiflow hidden from the slash menu"; else ok "user-invocable not disabled (slash-invocable)"; fi
 
@@ -54,7 +56,7 @@ echo "== MANUAL (needs a live Claude Code session — cannot be automated) =="
 cat <<'MANUAL'
   [ ] /plugin marketplace add swinxx/kimiflow && /plugin install kimiflow@kimiflow → restart
   [ ] type "/kimiflow" → the command appears and fires (slash invocation works; cf. CC #26251)
-  [ ] kimiflow does NOT auto-trigger on an unrelated request (disable-model-invocation honored; cf. CC #22345)
+  [ ] kimiflow launches when you ASK for it ("with kimiflow" / "run kimiflow") but does NOT fire unprompted on an unrelated request (opt-in policy is description-guided, not a hard flag; cf. CC #22345)
   [ ] in a repo with .kimiflow/, attempting `git add .` is blocked by the commit-secret-gate hook
   [ ] the Stop test-gate engages when .kimiflow/test-gate is present and tests are red
 MANUAL

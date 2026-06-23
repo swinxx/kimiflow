@@ -44,7 +44,7 @@ git clone https://github.com/swinxx/kimiflow ~/.claude/skills/kimiflow
 ```
 Gives you `/kimiflow` (auto-discovered, no restart needed) — but **not** the hooks (`hooks.json` loads only via the plugin).
 
-> **Public repo** — anyone can install; no access request needed. The skill fires **manually only** (`disable-model-invocation: true`) — invoke it with `/kimiflow`.
+> **Public repo** — anyone can install; no access request needed. The skill is **opt-in**: it launches when you ask for it (say "kimiflow" / "with kimiflow" / "run kimiflow", or type `/kimiflow`) and **won't fire unprompted** on unrelated requests. (This is description-guided judgment, not a hard block — if you want a mechanical no-auto-trigger guarantee, set `disable-model-invocation: true` in `SKILL.md`.)
 
 ## 30-second demo
 
@@ -200,7 +200,7 @@ git clone https://github.com/swinxx/kimiflow ~/.claude/skills/kimiflow
 ```
 Gibt dir `/kimiflow` (automatisch erkannt, kein Neustart nötig) — aber **nicht** die Hooks (`hooks.json` lädt nur über das Plugin).
 
-> **Öffentliches Repo** — jeder kann installieren; kein Zugriffsantrag nötig. Der Skill springt **nur manuell** an (`disable-model-invocation: true`) — Aufruf mit `/kimiflow`.
+> **Öffentliches Repo** — jeder kann installieren; kein Zugriffsantrag nötig. Der Skill ist **opt-in**: er startet, wenn du ihn verlangst (sag „kimiflow" / „mit kimiflow" / „lauf kimiflow", oder tippe `/kimiflow`) und springt **nicht ungefragt** bei unverwandten Anfragen an. (Das steuert die Beschreibung + Urteilsvermögen, keine harte Sperre — willst du eine mechanische Kein-Auto-Trigger-Garantie, setze `disable-model-invocation: true` in `SKILL.md`.)
 
 ## 30-Sekunden-Demo
 

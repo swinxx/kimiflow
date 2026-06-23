@@ -2,6 +2,34 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.21
+
+Add a deliberate **defer → backlog** outcome to the Phase-4 pre-build summary gate. Until now a ready,
+plan-gate-approved plan could only be **approved** (build now) or sent back to **change** — to park it for
+later you had to lean on the silent headless/`--prepare` fallback. Now the interactive stop offers an
+explicit third choice: "good plan, not now → backlog." **Docs/contract only — no engine, hook, script, or
+flag change.**
+
+### Added
+- **`SKILL.md` Phase 4 step 7:** the pre-build gate question is now "Approve to build, change something, or
+  defer to backlog?" — **defer → backlog** STOPs, marks `Status: backlog` in `STATE.md`, and emits
+  `/kimiflow --resume <slug>`. It is the *explicit* twin of the `--prepare`/headless stop (same parked
+  state, deliberate intent).
+- **`STATE.md` gains a `Status:` line** (`SKILL.md` Phase 0 step 3): `active` while a run is in progress,
+  `backlog` once a complete plan is parked before implementation (phases 0–4 done, 5 open); an absent
+  `Status:` reads as `active`. The marker is written by every Phase-4 pre-build park reaching 0–4-done
+  (the `defer`, headless, and step-6 plan-gate-open `--prepare` stops all share it) — so the backlog view
+  can't mislabel one park as different from its identical-state siblings; an earlier stop (Explore,
+  mid-phase) stays `active`.
+- **`--resume` (no-slug) listing** now surfaces each run's `Status:` (absent → `active`), so deliberately
+  parked **backlog** items are visible as a backlog.
+
+### Changed
+- **`reference.md` "Pre-build summary gate" Outcomes** documents the `defer → backlog` outcome and the
+  explicit-defer-vs-silent-headless distinction (same parked state + marker; the difference is intent).
+  Headless / no-answer control-flow is **unchanged** — it still behaves like `--prepare`, now also
+  stamping the shared `Status: backlog` marker.
+
 ## 0.1.20
 
 Make kimiflow **model-invocable (opt-in)** instead of hard-blocked. Previously `disable-model-invocation:

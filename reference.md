@@ -265,7 +265,9 @@ Lets kimiflow get smarter about a project over time instead of re-deriving it ev
 **Append (Phase 7, after the commit, only if the user enabled project memory):**
 - `.kimiflow/STANDARDS.md` — newly **verified** conventions worth keeping (e.g. "errors use `Result<T>`; tests live in `__tests__/`"). One line each, no speculation.
 - `.kimiflow/DECISIONS.md` — a 3–5 line entry: what we chose, why, what surprised us (source-attributed).
-- Optional `.kimiflow/LEDGER.md` — one line per run: slug · scope · rounds used · gate pass/fail · knobs enabled.
+- Optional `.kimiflow/LEDGER.md` — one line per run: slug · scope · rounds used · gate pass/fail · knobs enabled · **approx. token cost** · **post-commit outcome** (e.g. `regression-in-7d: y/n`). The last two turn the ledger into a cheap **ROI instrument**: over ~10–20 runs the cost/outcome columns show whether a tier earns its spend.
+
+**When is `large` worth it?** (Honest, pending ledger evidence.) `large` multiplies reviewer × round × knob cost; the current expectation is that it rarely beats default **`small` + one cross-family review** — reserve it for the scope-gate's real triggers (auth/money/privacy, migrations, subtle hard-to-reproduce bugs, ≥~5 files). Let the LEDGER's cost/outcome columns confirm or refute this per project instead of bumping to `large` on reflex.
 
 Keep all three **flat markdown and short**. This is the lightweight version of steering/standards files (Kiro/Agent OS/Cursor) and learnings (GSD) — no DB, no schema, no scoring.
 

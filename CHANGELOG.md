@@ -2,6 +2,29 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.17
+
+Close a real bypass in the `commit-secret-gate` hook and document its boundaries honestly. The gate
+only inspected the **index** (`git diff --cached`), so a secret-looking file committed via implicit
+staging slipped through. **Hook + tests + docs only — no new mechanism or dependency.**
+
+### Fixed
+- **`commit-secret-gate` — `git commit -a`/`--all`/`-am` bypass** (`hooks/commit-secret-gate.sh`). These
+  forms auto-stage tracked working-tree modifications *at commit time*, after the PreToolUse hook has
+  already read the index — so a modified, already-tracked `.env` (etc.) was committed unblocked. The
+  hook now also scans tracked-but-unstaged modifications (`git diff --name-only`) when `-a`/`--all` is
+  present. Flag detection matches `a` before any value-taking short option (m/c/C/F/S/u), so bundled
+  forms `-am`/`-vam`/`-qam` are caught while `-ma` (a message), `-uall`, `-Sabc` and `--allow-empty` are
+  correctly ignored. Unit tests added (`hooks/test-commit-secret-gate.sh`, 70 cases).
+
+### Changed
+- **Honest scope docs** (`reference.md` "Commit hygiene" + hook header). The gate no longer claims to
+  block "any `git commit`": it now states the `-a`/`--all` coverage **and** the residual limitations —
+  an explicit **pathspec commit** (`git commit <path>`) of an already-tracked secret is **not** covered
+  (parsing a pathspec from a shell string needs an AST, not a regex). **Bottom line: the gate is a
+  path-hygiene backstop, not complete secret protection** — pair it with `.gitignore` discipline + a
+  content scanner (gitleaks/trufflehog) and don't track secrets in the first place.
+
 ## 0.1.16
 
 Add **claude-mem** as a second *optional* memory-recall provider in Phase 2, alongside the Obsidian

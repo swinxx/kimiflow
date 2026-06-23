@@ -61,5 +61,6 @@ Drop `kimiflow.gif` next to this file and reference it from the top README, e.g.
 Keep it under ~3 MB so GitHub renders it inline; `agg` (`--font-size`, `--speed`) and `vhs`
 (`Set Width/Height`, `Set PlaybackSpeed`) both expose size/speed knobs.
 
-> **No `kimiflow.gif` is committed yet** — record A (or render B) and add it. Until then the README's
-> text demo stands on its own, so nothing references a missing image.
+> The committed `kimiflow.gif` is the **scripted illustration** (Path B — the feature-build
+> walkthrough). Swap in a real Path-A capture when you have one: same filename, so the README picks it
+> up automatically.

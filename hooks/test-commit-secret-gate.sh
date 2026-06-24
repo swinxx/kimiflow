@@ -155,6 +155,32 @@ clear_index; stage .env; assert_deny  $'git commit\t-m wip'      "tab_after_comm
 NOREPO="$WORK/norepo"; git init -q "$NOREPO"; : > "$NOREPO/.env"; git -C "$NOREPO" add -f .env >/dev/null 2>&1
 assert_allow "git commit -m x" "out_of_scope_repo_allowed" "$NOREPO"
 
+# --- BYPASS FIX: `git -C <target>` must scope the gate to <target>, not the tool cwd. These run from
+# an OUTSIDE non-kimiflow dir with the PROCESS cwd = the JSON cwd (run_at), so the git_root no-`-C`
+# fallback (commit-secret-gate.sh:35) can't mask a broken fix. ---
+OUTSIDE="$WORK/outside"; mkdir -p "$OUTSIDE"                       # plain dir, NOT a git/kimiflow repo
+TREPO="$WORK/trepo";   git init -q "$TREPO";   mkdir -p "$TREPO/.kimiflow";   git -C "$TREPO" config user.email t@t; git -C "$TREPO" config user.name t
+TREPO2="$WORK/trepo2"; git init -q "$TREPO2";  mkdir -p "$TREPO2/.kimiflow";  git -C "$TREPO2" config user.email t@t; git -C "$TREPO2" config user.name t
+SAFE="$WORK/safe";     git init -q "$SAFE";    mkdir -p "$SAFE/.kimiflow"
+
+run_at()          { ( cd "$2" 2>/dev/null && payload "$1" "$2" | "$HOOK" ); }   # PROCESS cwd = json cwd
+assert_deny_at()  { out="$(run_at "$1" "$3")"; if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then pass "$2"; else fail "$2 (expected DENY, got: ${out:-<empty/allow>})"; fi; }
+assert_allow_at() { out="$(run_at "$1" "$3")"; if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then fail "$2 (expected ALLOW, got DENY: $out)"; else pass "$2"; fi; }
+
+# guard: OUTSIDE must NOT sit under a kimiflow repo, else the fallback could mask a broken fix (unsound test)
+g="$OUTSIDE"; gk=""; while [ -n "$g" ] && [ "$g" != "/" ]; do [ -d "$g/.kimiflow" ] && gk="$g"; g="$(dirname "$g")"; done
+if [ -z "$gk" ]; then pass "gitc_outside_guard_no_kimiflow"; else fail "gitc_outside_guard ($gk has .kimiflow — test unsound)"; fi
+
+: > "$TREPO/prod.env"; git -C "$TREPO" add -f prod.env >/dev/null 2>&1                    # secret staged in target
+assert_deny_at  "git -C $TREPO commit -m x"          "gitc_commit_outside"                "$OUTSIDE"   # AC-1
+assert_deny_at  "git -C $TREPO commit -C HEAD -m x"  "gitc_reuse_message_discriminator"   "$OUTSIDE"   # AC-3 (reuse -C ≠ chdir)
+assert_deny_at  "git -C ../$(basename "$TREPO") commit -m x" "gitc_relative_C"            "$OUTSIDE"   # AC-8 (relative/cumulative -C)
+: > "$SAFE/README.md"; git -C "$SAFE" add -f README.md >/dev/null 2>&1                    # only a safe file staged
+assert_allow_at "git -C $SAFE commit -m x"           "gitc_safe_outside_allows"           "$OUTSIDE"   # AC-4 (no false positive)
+printf v1 > "$TREPO2/tracked.key"; git -C "$TREPO2" add -f tracked.key >/dev/null 2>&1; git -C "$TREPO2" commit -q -m base
+printf v2 > "$TREPO2/tracked.key"                                                         # tracked secret now modified (unstaged)
+assert_deny_at  "git -C $TREPO2 commit -am x"        "gitc_commit_am_outside"             "$OUTSIDE"   # AC-2 (-a scans TARGET work tree)
+
 # ============================================================================
 # No-jq path: the hook FAILS CLOSED without jq, and the git add/commit detection
 # must be robust against quotes between `git` and the subcommand. Drive the REAL
@@ -192,6 +218,11 @@ allow_nojq "git commit -m x"                     "nojq_no_kimiflow_allowed" "$PL
 # contract — see commit-secret-gate.sh no-jq comment + reference.md "Commit hygiene". ---
 deny_nojq  'echo "git commit later"'             "nojq_benign_git_mention_overblocked(intended)"  # AC-1
 allow_nojq 'echo "deploy later"'                 "nojq_nongit_phrase_allowed"                      # AC-1
+
+# no-jq path must ALSO honor `git -C <target>` from outside (fail-closed): process cwd = OUTSIDE
+deny_nojq_at() { out="$(( cd "$3" 2>/dev/null && payload "$1" "$3" | PATH="$NOJQ" "$REALBASH" "$HOOK" ) 2>/dev/null)"; if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then pass "$2"; else fail "$2 (expected DENY, got: ${out:-<empty/allow>})"; fi; }
+deny_nojq_at "git -C $TREPO commit -m x"         "nojq_gitc_outside_denied"           "$OUTSIDE"   # AC-6
+deny_nojq_at "git -C $TREPO commit -C HEAD -m x" "nojq_gitc_reuse_outside_denied"     "$OUTSIDE"   # AC-6 (reuse -C must not poison the real -C)
 
 echo "----"
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

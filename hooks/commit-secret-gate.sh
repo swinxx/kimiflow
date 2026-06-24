@@ -31,8 +31,20 @@ emit_deny() { # $1 = reason; emits a valid PreToolUse deny with or without jq
   exit 0
 }
 
-git_root() { # $1 = candidate cwd; echo the git root (cwd first, hook cwd fallback)
-  git -C "${1:-.}" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || true
+git_root() { # $1 = candidate cwd; $2.. = extra git global opts in command order (e.g. `-C <path>`).
+  # Echo the git root, HONORING any `git -C <path>` from the command (git applies multiple -C
+  # cumulatively, relative to $cwd). The bare process-cwd fallback fires ONLY when NO extra opts were
+  # passed — a `-C` that was specified but is unresolvable must NOT silently mis-scope to the hook's cwd.
+  c="${1:-.}"; shift || true
+  if [ "$#" -gt 0 ]; then
+    # honor the -C target; if it's unresolvable (e.g. a quoted/space path we mis-extracted), fall back
+    # to the cwd ITSELF — never to the hook's own process cwd — preserving cwd-based detection without
+    # mis-scoping elsewhere.
+    git -C "$c" "$@" rev-parse --show-toplevel 2>/dev/null \
+      || git -C "$c" rev-parse --show-toplevel 2>/dev/null || true
+  else
+    git -C "$c" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || true
+  fi
 }
 
 # ---- No jq: cannot parse/verify → FAIL CLOSED on git add/commit in kimiflow repos ----
@@ -46,8 +58,18 @@ git_root() { # $1 = candidate cwd; echo the git root (cwd first, hook cwd fallba
 if ! command -v jq >/dev/null 2>&1; then
   if printf '%s' "$input" | grep -qE 'git.{0,200}(add|commit)'; then
     cwd="$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-    root="$(git_root "$cwd")"
-    [ -n "$root" ] && [ -d "$root/.kimiflow" ] && emit_deny "kimiflow commit-secret-gate: jq is not installed — cannot verify staged files for secrets, so this git command is blocked (fail-closed). Install jq (brew install jq / apt-get install jq); jq is also required by kimiflow's test-gate."
+    nojq_deny() { emit_deny "kimiflow commit-secret-gate: jq is not installed — cannot verify staged files for secrets, so this git command is blocked (fail-closed). Install jq (brew install jq / apt-get install jq); jq is also required by kimiflow's test-gate."; }
+    nojq_check() { r="$(git_root "$cwd" "$@")"; [ -n "$r" ] && [ -d "$r/.kimiflow" ] && nojq_deny; }
+    # Block if the cwd OR any `git -C <path>` target is a kimiflow repo. Without jq we can't tell a global
+    # `-C <path>` from a reuse-message `-C <commit>`, so we test each candidate INDEPENDENTLY (not git's
+    # cumulative chain) — an unresolvable `-C HEAD` then can't poison a real `-C <kimiflow-repo>`. Raw,
+    # best-effort; over-blocking is the safe failure. Heredoc-fed `while` (current shell), NOT a pipe.
+    nojq_check                                  # cwd
+    while IFS= read -r p; do
+      [ -n "$p" ] && nojq_check -C "$p"         # each -C target on its own
+    done <<EOF
+$(printf '%s' "$input" | grep -oE -- '-C +[^ "]+' | sed -E 's/^-C +//')
+EOF
   fi
   exit 0
 fi
@@ -68,7 +90,23 @@ git_sub() { printf '%s' "$cmd" | grep -qE "(^|[;&|][[:space:]]*)git( +-[Cc] +[^ 
 
 git_sub add || git_sub commit || exit 0
 
-root="$(git_root "$cwd")"
+# Honor `git -C <path>` GLOBAL options (those between `git` and its add/commit subcommand — NOT a
+# `-C <commit>` that FOLLOWS `commit`, which is git's reuse-message) so `git -C <target> commit` scopes
+# the gate to <target>, not the tool cwd. We collect them and let git resolve them cumulatively relative
+# to $cwd, exactly as `git -C` does — no bespoke path math. The `while` is fed by a HEREDOC in the
+# CURRENT shell; a `grep | while` pipe would run in a subshell, leaving $@ empty → silent no-op.
+# Best-effort/unquoted like the rest of this gate (a space in a quoted -C path is a documented residual).
+set --
+while IFS= read -r p; do
+  [ -n "$p" ] && set -- "$@" -C "$p"
+done <<EOF
+$(printf '%s' "$cmd" \
+  | grep -oE "(^|[;&|][[:space:]]*)git( +-[Cc] +[^ ]+| +-[^ ]+)* +(add|commit)" \
+  | sed -E 's/[[:space:]]+(add|commit)[[:space:]]*$//' \
+  | grep -oE -- '-C +[^ ]+' \
+  | sed -E 's/^-C +//')
+EOF
+root="$(git_root "$cwd" "$@")"
 [ -n "$root" ] || exit 0
 [ -d "$root/.kimiflow" ] || exit 0   # scope: kimiflow repos only
 
@@ -113,8 +151,12 @@ if git_sub commit; then
   # (m/c/C/F/S/u — incl. optional-arg `-S`gpg / `-u`untracked) — so `-am`/`-vam`/`-qam` are caught,
   # while `-ma` (a message), `-uall`, `-Sabc` are NOT; `--all` is a whole word (not `--allow-empty`).
   # KNOWN RESIDUALS (regex ≠ shell parser — documented, see reference.md → "Commit hygiene"):
-  # an `env X=y`/`sudo` prefix (defeats the command-position anchor, gate-wide), an escaped quote
-  # inside the message, and an explicit pathspec commit (`git commit <path>`) are NOT covered.
+  # a command-position-anchor evasion — `env X=y`/`sudo`, a path-prefixed `/usr/bin/git`, or a
+  # `command`/`builtin`/`exec git` wrapper (all defeat the `git`-at-command-position anchor, gate-wide);
+  # an escaped quote inside the message; a QUOTED `-C` path containing a space (`git -C "my repo"` —
+  # `git -C <path>` IS honored, but only for unquoted/space-free paths); and an explicit pathspec
+  # commit (`git commit <path>`) are NOT covered. (A global `git -C <path>` to another repo IS
+  # honored — the gate resolves the target via git's own cumulative `-C`, not the tool cwd.)
   unstaged=""
   cmd_unq="$(printf '%s' "$cmd" \
     | awk '{ if (sub(/\\$/,"")) printf "%s ", $0; else print }' \

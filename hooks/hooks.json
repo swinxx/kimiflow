@@ -6,11 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/commit-secret-gate.sh"
+            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/commit-secret-gate.sh"
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/state-gate.sh"
+            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/state-gate.sh"
           }
         ]
       }
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/test-gate.sh"
+            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/test-gate.sh"
           }
         ]
       }

@@ -7,15 +7,15 @@
 ╚═╝  ╚═╝╚═╝╚═╝     ╚═╝╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ 
 ```
 
-# kimiflow — Feature & Fix Loop (Claude Code skill + plugin)
+# kimiflow — Feature & Fix Loop (Claude Code + Codex skill/plugin)
 
-A **user-invoked** `/kimiflow` skill+plugin that runs a disciplined **8-phase loop** for building features and fixing bugs — clarify → understand/diagnose → plan → plan-gate → implement → verify → code-review → commit. Its gates are **mechanical, not advisory**: reviewers write structured findings to files, a tested **fail-closed** script counts the open blockers, and a "done" self-report can't talk its way past them.
+A **user-invoked** `/kimiflow` (Claude Code) / `$kimiflow` (Codex) skill+plugin that runs a disciplined **8-phase loop** for building features and fixing bugs — clarify → understand/diagnose → plan → plan-gate → implement → verify → code-review → commit. Its gates are **mechanical, not advisory**: reviewers write structured findings to files, a tested **fail-closed** script counts the open blockers, and a "done" self-report can't talk its way past them.
 
 > `SKILL.md` / `reference.md` are written in English. **kimiflow replies in the language you write in** — write in German and it grills/answers in German.
 
 ## Why this exists
 
-Claude Code's native plan-mode, subagents and hooks already cover a lot — so why a skill? Because a prose `CLAUDE.md` *asks*; kimiflow *enforces*. The plan-gate and code-review gates are **tested, fail-closed resolver scripts** (`hooks/resolve-review-gate.sh`) that count open blockers mechanically — a verbose model can't argue past them. The secret-commit and test gates are real **PreToolUse/Stop hooks**, not reminders. And it travels: install once, identical gates in every repo, no per-project prompt drift. (kimiflow still *reads* your `CLAUDE.md` as a conventions hint — it just never relies on it for a gate.)
+Claude Code and Codex both cover a lot with native planning, subagents and hooks — so why a skill? Because a prose instruction file *asks*; kimiflow *enforces*. The plan-gate and code-review gates are **tested, fail-closed resolver scripts** (`hooks/resolve-review-gate.sh`) that count open blockers mechanically — a verbose model can't argue past them. The secret-commit and test gates are real **PreToolUse/Stop hooks**, not reminders. And it travels: install once, identical gates in every repo, no per-project prompt drift. (kimiflow still reads project convention files such as `AGENTS.md` / `CLAUDE.md` as hints — it just never relies on them for a gate.)
 
 ## Install
 
@@ -23,7 +23,7 @@ Claude Code's native plan-mode, subagents and hooks already cover a lot — so w
 
 **Optional (recommended):** an Obsidian (or compatible notes) MCP for the **vault memory layer** — kimiflow searches the vault before researching and saves reusable findings back, auto-discovering your vault's own structure. No vault MCP → kimiflow skips it and uses the repo-local `.kimiflow/` memory. → full setup + why it's worth it under **[Vault memory layer](#vault-memory-layer-optional-but-recommended)** below.
 
-### Recommended — plugin (skill **+** hooks)
+### Claude Code — plugin (skill **+** hooks)
 
 Inside Claude Code:
 ```
@@ -37,14 +37,34 @@ claude plugin install kimiflow@kimiflow
 ```
 Then **restart Claude Code** (or open a new session) and run `/kimiflow`. This installs the skill **and** the safety hooks (`commit-secret-gate`, `test-gate`). Update later with `claude plugin update kimiflow`.
 
-### Alternative — skill only (no hooks)
+### Codex — plugin skill **+** stable hooks
+
+From this repository checkout:
+
+```bash
+codex plugin marketplace add .
+bash hooks/install-codex-hooks.sh
+```
+
+Then open the Codex plugin browser (`/plugins` in the CLI, or **Plugins** in the Codex app), install **kimiflow** from the **kimiflow** marketplace, start a new thread, and invoke it explicitly:
+
+```text
+$kimiflow Add a dark-mode toggle in settings
+$kimiflow --fix App crashes when opening an empty project
+```
+
+`hooks/install-codex-hooks.sh` writes Kimiflow wrappers into `${CODEX_HOME:-~/.codex}/hooks`, the stable Codex hook surface, and pins them back to this plugin checkout with `KIMIFLOW_PLUGIN_ROOT`. Some Codex CLI versions expose marketplace management but not a non-interactive plugin install command; in that case the plugin browser/app install step is expected. Codex plugin-bundled hooks are also described in `hooks.json` for builds that enable `plugin_hooks`, but Kimiflow's safety gates do not rely on that experimental path.
+
+The Codex port uses the same `.kimiflow/<slug>/` state, resolver scripts, commit-secret-gate, state-gate, and test-gate as the Claude Code plugin once the hook installer has run.
+
+### Claude Code alternative — skill only (no hooks)
 
 ```bash
 git clone https://github.com/swinxx/kimiflow ~/.claude/skills/kimiflow
 ```
 Gives you `/kimiflow` (auto-discovered, no restart needed) — but **not** the hooks (`hooks.json` loads only via the plugin).
 
-> **Public repo** — anyone can install; no access request needed. The skill is **opt-in**: it launches when you ask for it (say "kimiflow" / "with kimiflow" / "run kimiflow", or type `/kimiflow`) and **won't fire unprompted** on unrelated requests. (This is description-guided judgment, not a hard block — if you want a mechanical no-auto-trigger guarantee, set `disable-model-invocation: true` in `SKILL.md`.)
+> **Public repo** — anyone can install; no access request needed. The skill is **opt-in**: it launches when you ask for it (say "kimiflow" / "with kimiflow" / "run kimiflow", type `/kimiflow` in Claude Code, or invoke `$kimiflow` in Codex) and **won't fire unprompted** on unrelated requests. This is description-guided judgment, not a hard block.
 
 ## 30-second demo
 
@@ -94,6 +114,14 @@ What is **not** mechanical (model-judged, by design): the scope classification, 
 /kimiflow --fix <bug>        # force fix mode
 /kimiflow <…> --prepare      # prepare only (through plan-gate), implement later
 /kimiflow --resume <slug>    # continue a prepared/interrupted run in a fresh session
+```
+
+In Codex, use the same arguments with `$kimiflow`:
+
+```text
+$kimiflow <feature>
+$kimiflow --fix <bug>
+$kimiflow --resume <slug>
 ```
 
 ## Example
@@ -165,13 +193,13 @@ kimiflow uses `obsidian_simple_search`, `obsidian_get_file_contents` and `obsidi
 
 # kimiflow — Feature- & Fix-Loop (Deutsch)
 
-Ein **user-invoked** `/kimiflow`-Skill+Plugin, das einen disziplinierten **8-Phasen-Loop** fürs Bauen von Features und Fixen von Bugs fährt — Klärung → Verstehen/Diagnose → Plan → Plan-Gate → Umsetzung → Verifikation → Code-Review → Commit. Seine Gates sind **mechanisch, nicht beratend**: Reviewer schreiben strukturierte Findings in Dateien, ein getestetes **fail-closed** Script zählt die offenen Blocker, und ein „fertig" lässt sich nicht daran vorbeireden.
+Ein **user-invoked** `/kimiflow`- (Claude Code) / `$kimiflow`-Skill+Plugin (Codex), das einen disziplinierten **8-Phasen-Loop** fürs Bauen von Features und Fixen von Bugs fährt — Klärung → Verstehen/Diagnose → Plan → Plan-Gate → Umsetzung → Verifikation → Code-Review → Commit. Seine Gates sind **mechanisch, nicht beratend**: Reviewer schreiben strukturierte Findings in Dateien, ein getestetes **fail-closed** Script zählt die offenen Blocker, und ein „fertig" lässt sich nicht daran vorbeireden.
 
 > `SKILL.md` / `reference.md` sind auf Englisch geschrieben. **kimiflow antwortet in deiner Sprache** — schreibst du Deutsch, grillt/antwortet es auf Deutsch.
 
 ## Warum es das gibt
 
-Claude Codes native Plan-Mode, Subagents und Hooks decken schon viel ab — warum also ein Skill? Weil ein prosaisches `CLAUDE.md` *bittet*; kimiflow *erzwingt*. Plan-Gate und Code-Review-Gate sind **getestete, fail-closed Resolver-Scripts** (`hooks/resolve-review-gate.sh`), die offene Blocker mechanisch zählen — ein geschwätziges Modell argumentiert sich da nicht vorbei. Secret-Commit- und Test-Gate sind echte **PreToolUse/Stop-Hooks**, keine Erinnerungen. Und es reist mit: einmal installiert, identische Gates in jedem Repo, kein Per-Projekt-Prompt-Drift. (kimiflow *liest* dein `CLAUDE.md` weiterhin als Konventions-Hinweis — verlässt sich für ein Gate nur nie darauf.)
+Claude Code und Codex decken mit nativer Planung, Subagents und Hooks schon viel ab — warum also ein Skill? Weil eine prosaische Instruktionsdatei *bittet*; kimiflow *erzwingt*. Plan-Gate und Code-Review-Gate sind **getestete, fail-closed Resolver-Scripts** (`hooks/resolve-review-gate.sh`), die offene Blocker mechanisch zählen — ein geschwätziges Modell argumentiert sich da nicht vorbei. Secret-Commit- und Test-Gate sind echte **PreToolUse/Stop-Hooks**, keine Erinnerungen. Und es reist mit: einmal installiert, identische Gates in jedem Repo, kein Per-Projekt-Prompt-Drift. (kimiflow liest Projektkonventionen wie `AGENTS.md` / `CLAUDE.md` als Hinweise — verlässt sich für ein Gate nur nie darauf.)
 
 ## Installation
 
@@ -179,7 +207,7 @@ Claude Codes native Plan-Mode, Subagents und Hooks decken schon viel ab — waru
 
 **Optional (empfohlen):** ein Obsidian- (oder kompatibler Notes-) MCP für die **Vault-Memory-Schicht** — kimiflow durchsucht den Vault vor dem Recherchieren und speichert wiederverwendbare Erkenntnisse zurück, wobei es die Struktur deines Vaults selbst erkennt. Kein Vault-MCP → kimiflow überspringt ihn und nutzt die repo-lokale `.kimiflow/`-Memory. → vollständiges Setup + warum es sich lohnt unter **Vault-Memory-Schicht** unten.
 
-### Empfohlen — Plugin (Skill **+** Hooks)
+### Claude Code — Plugin (Skill **+** Hooks)
 
 In Claude Code:
 ```
@@ -193,14 +221,34 @@ claude plugin install kimiflow@kimiflow
 ```
 Dann **Claude Code neu starten** (oder neue Session) und `/kimiflow` aufrufen. Das installiert den Skill **und** die Sicherheits-Hooks (`commit-secret-gate`, `test-gate`). Später aktualisieren mit `claude plugin update kimiflow`.
 
-### Alternative — nur Skill (ohne Hooks)
+### Codex — Plugin-Skill **+** stabile Hooks
+
+Aus diesem Repository-Checkout:
+
+```bash
+codex plugin marketplace add .
+bash hooks/install-codex-hooks.sh
+```
+
+Dann im Codex-Plugin-Browser (`/plugins` in der CLI oder **Plugins** in der Codex-App) **kimiflow** aus dem **kimiflow**-Marketplace installieren, einen neuen Thread starten und explizit aufrufen:
+
+```text
+$kimiflow Dunkelmodus-Schalter in den Einstellungen
+$kimiflow --fix App stürzt ab beim Öffnen eines leeren Projekts
+```
+
+`hooks/install-codex-hooks.sh` schreibt Kimiflow-Wrapper nach `${CODEX_HOME:-~/.codex}/hooks`, also in die stabile Codex-Hook-Oberfläche, und pinnt sie über `KIMIFLOW_PLUGIN_ROOT` zurück auf diesen Plugin-Checkout. Einige Codex-CLI-Versionen haben Marketplace-Verwaltung, aber keinen nicht-interaktiven Plugin-Install-Befehl; dann ist der Installationsschritt über Plugin-Browser/App normal. Plugin-gebündelte Codex-Hooks sind zusätzlich in `hooks.json` beschrieben, falls ein Build `plugin_hooks` aktiviert, aber Kimiflows Sicherheitsgates hängen nicht von diesem experimentellen Pfad ab.
+
+Der Codex-Port nutzt dieselbe `.kimiflow/<slug>/`-State-Struktur, dieselben Resolver-Scripts, denselben commit-secret-gate, state-gate und test-gate wie das Claude-Code-Plugin, sobald der Hook-Installer gelaufen ist.
+
+### Claude-Code-Alternative — nur Skill (ohne Hooks)
 
 ```bash
 git clone https://github.com/swinxx/kimiflow ~/.claude/skills/kimiflow
 ```
 Gibt dir `/kimiflow` (automatisch erkannt, kein Neustart nötig) — aber **nicht** die Hooks (`hooks.json` lädt nur über das Plugin).
 
-> **Öffentliches Repo** — jeder kann installieren; kein Zugriffsantrag nötig. Der Skill ist **opt-in**: er startet, wenn du ihn verlangst (sag „kimiflow" / „mit kimiflow" / „lauf kimiflow", oder tippe `/kimiflow`) und springt **nicht ungefragt** bei unverwandten Anfragen an. (Das steuert die Beschreibung + Urteilsvermögen, keine harte Sperre — willst du eine mechanische Kein-Auto-Trigger-Garantie, setze `disable-model-invocation: true` in `SKILL.md`.)
+> **Öffentliches Repo** — jeder kann installieren; kein Zugriffsantrag nötig. Der Skill ist **opt-in**: er startet, wenn du ihn verlangst (sag „kimiflow" / „mit kimiflow" / „lauf kimiflow", tippe `/kimiflow` in Claude Code oder nutze `$kimiflow` in Codex) und springt **nicht ungefragt** bei unverwandten Anfragen an. Das steuert die Beschreibung + Urteilsvermögen, keine harte Sperre.
 
 ## 30-Sekunden-Demo
 
@@ -250,6 +298,14 @@ Jedes ✋/✅ sowie der Diagnose- und Commit-Stopp ist ein echtes Gate, kein Pro
 /kimiflow --fix <bug>        # Fix-Modus erzwingen
 /kimiflow <…> --prepare      # nur vorbereiten (bis Plan-Gate), später umsetzen
 /kimiflow --resume <slug>    # vorbereiteten/abgebrochenen Lauf in neuer Session fortsetzen
+```
+
+In Codex nutzt du dieselben Argumente mit `$kimiflow`:
+
+```text
+$kimiflow <feature>
+$kimiflow --fix <bug>
+$kimiflow --resume <slug>
 ```
 
 ## Beispiel

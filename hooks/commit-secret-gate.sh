@@ -75,8 +75,8 @@ EOF
 fi
 
 # ---- jq available: precise path ----
-cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null || true)"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // .tool_input.args.command // .command // .shell_command // .args.command // empty' 2>/dev/null || true)"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // .tool_input.cwd // .working_directory // empty' 2>/dev/null || true)"
 [ -n "$cmd" ] || exit 0
 # Normalize non-newline whitespace (TAB/VT/FF/CR) to spaces so a token separator that isn't a literal
 # space can't defeat the space-anchored matchers below (e.g. `git<TAB>commit` / `git commit<TAB>--all`

@@ -2,6 +2,30 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.24
+
+Ship **Codex plugin parity** for kimiflow while keeping the Claude Code path intact.
+
+### Added
+- **Codex plugin packaging** via `.codex-plugin/plugin.json`, repo-local `.agents/plugins/marketplace.json`,
+  and `skills/kimiflow/SKILL.md`, so Codex can install kimiflow as a plugin-backed skill and invoke it
+  explicitly with `$kimiflow` / named Kimiflow prompts.
+- **Stable Codex hook installer** (`hooks/install-codex-hooks.sh`) that writes managed wrappers into
+  `${CODEX_HOME:-~/.codex}/hooks` and pins `KIMIFLOW_PLUGIN_ROOT` back to the plugin checkout. This makes
+  commit-secret-gate, state-gate, and test-gate work in Codex without relying on experimental
+  `plugin_hooks`.
+- **Codex structural smoke test** (`hooks/smoke-install-codex.sh`) covering Codex manifests, skill
+  frontmatter, optional plugin-hook wiring, temp `CODEX_HOME` wrapper installation, and synthetic Codex
+  hook payloads for commit, state, and test gates.
+
+### Changed
+- Hook payload parsing now accepts Codex-shaped command/cwd/stop-active fields alongside Claude-shaped
+  payloads.
+- `resolve-verbosity.sh` now honors `KIMIFLOW_HOST=codex` and uses `${CODEX_HOME:-~/.codex}` for Codex
+  global presentation settings.
+- Compatibility and README docs now distinguish stable Codex hook wrappers from optional plugin-bundled
+  hooks, and document Codex install/invocation flow.
+
 ## 0.1.23
 
 Make **slimness an active counter-force** instead of a polite principle. AIs over-build because training

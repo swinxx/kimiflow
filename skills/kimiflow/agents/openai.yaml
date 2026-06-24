@@ -1,0 +1,4 @@
+interface:
+  display_name: "kimiflow"
+  short_description: "Feature and fix loop with mechanical quality gates"
+  default_prompt: "Run Kimiflow for this change and carry it through the gates."

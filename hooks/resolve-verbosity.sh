@@ -9,7 +9,7 @@
 #   resolve-verbosity.sh onboard-check [--flag <level>] -> echo ASK iff nothing set anywhere, else SKIP
 #   resolve-verbosity.sh set <project|global> <level> -> validate, mkdir -p, write, verify, echo path
 #
-# Precedence (get): flag > project (.kimiflow/verbosity) > global (~/.claude/kimiflow/verbosity) > balanced
+# Precedence (get): flag > project (.kimiflow/verbosity) > global host config > balanced
 # Self-contained rule: only a single valid level word is ever read/written — a
 # gate/cost line placed in a file is not a valid level and is ignored.
 set -u
@@ -27,7 +27,14 @@ project_file() {
 }
 
 global_file() {
-  printf '%s/.claude/kimiflow/verbosity' "$HOME"
+  case "${KIMIFLOW_HOST:-claude}" in
+    codex)
+      printf '%s/kimiflow/verbosity' "${CODEX_HOME:-$HOME/.codex}"
+      ;;
+    *)
+      printf '%s/kimiflow/verbosity' "${CLAUDE_HOME:-$HOME/.claude}"
+      ;;
+  esac
 }
 
 # Echo the first line of $1 (trimmed) iff it is a valid level word; else return 1.

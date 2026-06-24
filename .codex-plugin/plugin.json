@@ -1,0 +1,43 @@
+{
+  "name": "kimiflow",
+  "version": "0.1.24",
+  "description": "Feature and bug-fix loop for Codex with mechanical quality gates, persistent run state, verification, review, and commit hygiene.",
+  "author": {
+    "name": "kimikon",
+    "url": "https://github.com/swinxx"
+  },
+  "homepage": "https://github.com/swinxx/kimiflow",
+  "repository": "https://github.com/swinxx/kimiflow",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "quality-gates",
+    "tdd",
+    "code-review",
+    "bug-fix",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "kimiflow",
+    "shortDescription": "Run feature and fix work through mechanical quality gates",
+    "longDescription": "Kimiflow runs a disciplined feature and bug-fix loop in Codex: clarify, understand or diagnose, plan, pass a mechanical plan gate, implement, verify, code-review, and stop at a commit gate. It keeps persistent .kimiflow run state and uses bundled shell gates for review resolution, commit hygiene, state persistence, and test gating.",
+    "developerName": "kimikon",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/swinxx/kimiflow",
+    "privacyPolicyURL": "https://github.com/swinxx/kimiflow",
+    "termsOfServiceURL": "https://github.com/swinxx/kimiflow/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Run kimiflow for this feature",
+      "Use kimiflow --fix for this bug",
+      "Prepare this change with kimiflow"
+    ],
+    "brandColor": "#1F6FEB",
+    "screenshots": []
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # kimiflow — unit tests for resolve-verbosity.sh (the display-verbosity helper).
 # Self-contained, no framework. Isolation: a fake $HOME + a NON-git temp project
-# dir, so the real ~/.claude/kimiflow/verbosity and this repo are never touched.
+# dir, so the real ~/.claude / ~/.codex verbosity files and this repo are never touched.
 # Run: bash hooks/test-resolve-verbosity.sh   (exit 0 = all green)
 set -u
 
@@ -10,6 +10,7 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/resolve-verbosity.sh"
 WORK="$(mktemp -d)"
 PROJ="$WORK/proj"          # cwd for project-file resolution (non-git → gitroot falls back to pwd)
 FAKE_HOME="$WORK/home"
+FAKE_CODEX_HOME="$WORK/codex-home"
 PROJ_FILE_REL=".kimiflow/verbosity"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -17,10 +18,12 @@ FAILS=0
 pass() { printf 'PASS: %s\n' "$1"; }
 fail() { printf 'FAIL: %s\n' "$1"; FAILS=$((FAILS + 1)); }
 
-reset() { rm -rf "$PROJ" "$FAKE_HOME"; mkdir -p "$PROJ" "$FAKE_HOME"; }
+reset() { rm -rf "$PROJ" "$FAKE_HOME" "$FAKE_CODEX_HOME"; mkdir -p "$PROJ" "$FAKE_HOME" "$FAKE_CODEX_HOME"; }
 set_project() { mkdir -p "$PROJ/.kimiflow"; printf '%s\n' "$1" > "$PROJ/.kimiflow/verbosity"; }
 set_global()  { mkdir -p "$FAKE_HOME/.claude/kimiflow"; printf '%s\n' "$1" > "$FAKE_HOME/.claude/kimiflow/verbosity"; }
+set_codex_global() { mkdir -p "$FAKE_CODEX_HOME/kimiflow"; printf '%s\n' "$1" > "$FAKE_CODEX_HOME/kimiflow/verbosity"; }
 run() { ( cd "$PROJ" && HOME="$FAKE_HOME" "$SCRIPT" "$@" ); }
+run_codex() { ( cd "$PROJ" && HOME="$FAKE_HOME" CODEX_HOME="$FAKE_CODEX_HOME" KIMIFLOW_HOST=codex "$SCRIPT" "$@" ); }
 assert_eq() { if [ "$1" = "$2" ]; then pass "$3"; else fail "$3 (got '$1' want '$2')"; fi; }
 
 # --- AC-1: flag overrides project/global ---
@@ -34,6 +37,8 @@ assert_eq "$(run)" "quiet" "test_project_over_global"
 # --- AC-3: global fallback (no flag, no project) ---
 reset; set_global verbose
 assert_eq "$(run)" "verbose" "test_global_fallback"
+reset; set_codex_global quiet
+assert_eq "$(run_codex)" "quiet" "test_codex_global_fallback"
 
 # --- AC-4: default balanced (nothing) ---
 reset
@@ -48,6 +53,10 @@ reset
 out="$(run set global verbose)"
 if [ -f "$FAKE_HOME/.claude/kimiflow/verbosity" ]; then pass "test_set_global_creates_file"; else fail "test_set_global_creates_file"; fi
 assert_eq "$(run)" "verbose" "test_set_global_roundtrip"
+reset
+out="$(run_codex set global verbose)"
+if [ -f "$FAKE_CODEX_HOME/kimiflow/verbosity" ]; then pass "test_set_codex_global_creates_file"; else fail "test_set_codex_global_creates_file"; fi
+assert_eq "$(run_codex)" "verbose" "test_set_codex_global_roundtrip"
 reset
 run set project quiet >/dev/null
 if [ -f "$PROJ/.kimiflow/verbosity" ]; then pass "test_set_project_creates_file"; else fail "test_set_project_creates_file"; fi

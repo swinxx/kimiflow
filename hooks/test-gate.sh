@@ -10,7 +10,7 @@ input="$(cat 2>/dev/null || true)"
 
 # Break the loop if this stop is itself a hook continuation (never re-block forever).
 if command -v jq >/dev/null 2>&1; then
-  active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null || true)"
+  active="$(printf '%s' "$input" | jq -r '.stop_hook_active // .hook_input.stop_hook_active // false' 2>/dev/null || true)"
   [ "$active" = "true" ] && exit 0
 else
   # No jq: detect the continuation flag with a tolerant grep, so the loop-break still
@@ -21,7 +21,7 @@ fi
 # Project dir: prefer the hook's reported cwd, else the current dir.
 proj=""
 if command -v jq >/dev/null 2>&1; then
-  proj="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+  proj="$(printf '%s' "$input" | jq -r '.cwd // .tool_input.cwd // .working_directory // empty' 2>/dev/null || true)"
 fi
 [ -n "$proj" ] && cd "$proj" 2>/dev/null || true
 

@@ -35,17 +35,26 @@ jobs:
       - name: Unit tests (test-gate) — hard gate
         run: bash hooks/test-gate-unit.sh
 
+      - name: Unit tests (state-gate) — hard gate
+        run: bash hooks/test-state-gate.sh
+
       - name: Unit tests (review-gate) — hard gate
         run: bash hooks/test-resolve-review-gate.sh
 
       - name: Validate JSON — hard gate
         run: |
           jq -e . hooks/hooks.json > /dev/null
+          jq -e . hooks.json > /dev/null
           jq -e . .claude-plugin/plugin.json > /dev/null
           jq -e . .claude-plugin/marketplace.json > /dev/null
+          jq -e . .codex-plugin/plugin.json > /dev/null
+          jq -e . .agents/plugins/marketplace.json > /dev/null
 
-      - name: Install smoke-test (structural) — hard gate
+      - name: Claude install smoke-test (structural) — hard gate
         run: bash hooks/smoke-install.sh
+
+      - name: Codex install smoke-test (structural) — hard gate
+        run: bash hooks/smoke-install-codex.sh
 
       - name: ShellCheck (informational)
         run: shellcheck hooks/*.sh || true

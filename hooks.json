@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "KIMIFLOW_HOST=codex ${KIMIFLOW_PLUGIN_ROOT:-.}/hooks/commit-secret-gate.sh",
+            "statusMessage": "Checking Kimiflow commit hygiene"
+          },
+          {
+            "type": "command",
+            "command": "KIMIFLOW_HOST=codex ${KIMIFLOW_PLUGIN_ROOT:-.}/hooks/state-gate.sh",
+            "statusMessage": "Checking Kimiflow run state"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "KIMIFLOW_HOST=codex ${KIMIFLOW_PLUGIN_ROOT:-.}/hooks/test-gate.sh",
+            "statusMessage": "Checking Kimiflow test gate"
+          }
+        ]
+      }
+    ]
+  }
+}

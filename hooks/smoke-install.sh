@@ -39,7 +39,8 @@ if printf '%s\n' "$fm" | grep -qE '^user-invocable:[[:space:]]*false'; then bad 
 echo "== hooks wiring (referenced scripts exist, executable, valid) =="
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
-  rel="${cmd#\$\{CLAUDE_PLUGIN_ROOT\}/}"; p="$ROOT/$rel"
+  rel="$(printf '%s\n' "$cmd" | grep -oE 'hooks/[^ "]*\.sh' | head -1)"
+  p="$ROOT/$rel"
   if [ -x "$p" ] && bash -n "$p" 2>/dev/null; then ok "hook script ok: $rel"; else bad "hook script missing/not-exec/bad: $rel"; fi
 done < <(jq -r '.hooks[]?[]?.hooks[]?.command' "$ROOT/hooks/hooks.json" 2>/dev/null)
 

@@ -2,6 +2,29 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.23
+
+Make **slimness an active counter-force** instead of a polite principle. AIs over-build because training
+rewards "comprehensive" and complexity carries no felt cost; a "keep it simple" line doesn't counter that.
+This applies kimiflow's own philosophy — adversarial + surfaced, not self-assessed — to over-engineering,
+while staying token-cheap (the check must not itself become bloat). **Docs/contract only — no new hook.**
+
+### Added
+- **Simplicity lens in Phase-7 code-review** (`reference.md` "Review rubric", `SKILL.md` Phase 7). KPI:
+  *"what can be deleted while the ACCEPTANCE tests stay green?"* It FLAGs any abstraction/option/error-
+  handling/layer **no test or real requirement demands** (earn the abstraction: **≥2 callers or a written
+  reason**; single-caller pass-throughs, impossible-state handling, speculative generality) and **proposes
+  the smaller version**. Output is **advisory** → `ADVISORIES.md`, triaged at the commit-gate
+  (dismiss-with-reason or adopt) — un-ignorable but non-gating (no false-positive thrash).
+- **Token-aware by design.** Runs only where a Phase-7 review runs (`small`/`large`); `trivial` is exempt
+  and pays nothing. At `small` the dimension is **folded into the existing reviewer** (no new spawn); a
+  **dedicated, blind Simplicity prosecutor** (a new Scaling knob) runs only at `large` or when a **size
+  tripwire** fires — `git diff --stat` shows a diff much larger than its scope suggests (orchestrator-read,
+  no hook), which raises a STOP+justify advisory.
+- **"Fold, don't spawn" rule** (`SKILL.md` Agent budget): prefer extending an existing subagent's brief
+  over a fresh spawn when it already has the inputs (~hundreds vs ~tens-of-k tokens); spawn a dedicated
+  agent only when independence/blindness is the point.
+
 ## 0.1.22
 
 Close a `commit-secret-gate` bypass where **`git -C <target> commit`** scoped the gate to the wrong repo.

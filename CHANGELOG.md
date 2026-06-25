@@ -2,6 +2,36 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.28
+
+Ship the **context-aware Kimiflow Launcher** and publish-safe repo documentation.
+
+### Added
+- `hooks/launcher-status.sh` and `hooks/test-launcher-status.sh` provide a read-only launcher snapshot:
+  project-map status/depth, findings, improvement slices, repo docs, dirty working tree, and active/backlog
+  runs.
+- Empty or vague Kimiflow invocations (`/kimiflow`, `$kimiflow`, `--launcher`, `--menu`) now route through
+  a context-aware launcher instead of requiring the user to know the right flag up front.
+- Resume safety rules now require revalidation before implementing a parked plan when affected files changed
+  since the plan commit, or when the plan basis/affected files are unknown.
+- Publish-safe repo docs under `docs/` document architecture, codebase layout, testing, and the public docs
+  boundary while keeping raw findings local.
+
+### Changed
+- Codex plugin metadata now surfaces the launcher in the default prompt and description.
+- Claude and Codex smoke tests assert the launcher contract and helper wiring.
+
+## 0.1.27
+
+Ship **hook labels and publish-safety docs** for the Codex plugin path.
+
+### Changed
+- Codex plugin-bundled hooks now carry names/descriptions/status text so plugin UIs can label them instead
+  of showing only generic hook numbers.
+- Project-map docs now state that raw `.kimiflow/project/` maps and sensitive findings stay local/private;
+  repo docs are curated publish-safe derivatives.
+- README and compatibility docs clarify local Codex plugin cache paths and update expectations.
+
 ## 0.1.26
 
 Ship **Codex plugin visibility improvements** so the Project Intelligence capability is visible in the

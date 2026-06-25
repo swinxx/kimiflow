@@ -1,9 +1,8 @@
 # docs/demo — the kimiflow demo GIF
 
-The README's **30-second demo** links here. The clip walks one **feature** — a dark-mode toggle —
-through the full 8-phase loop to the commit-gate: clarify → research (with considered-alternatives) →
-plan → **plan-gate** → implement → verify → review → **commit-gate** that stops for your OK. It mirrors
-[`../examples/03-feature.md`](../examples/03-feature.md).
+The README's **30-second demo** links here. The committed clip is a scripted overview of the current
+Kimiflow front door and core loop: launcher → project-map status → memory recall → mode choice →
+clarify/understand/plan → mechanical gates → commit stop → learning loop.
 
 Two ways to produce it. **Prefer A** — a real recording is the honest, credible artifact. B is a
 cosmetic placeholder, clearly labelled.
@@ -38,8 +37,8 @@ ran long.
 ## B — branded illustration (placeholder, clearly labelled)
 
 A deterministic, scripted reconstruction for a clean branded loop **before** a real capture exists.
-It is **not** a model run — [`play.sh`](play.sh) walks the feature build through the 8 phases with
-pacing and ANSI colour. Edit `play.sh` to change wording; re-run the tape to re-render.
+It is **not** a model run — [`play.sh`](play.sh) walks the current launcher, memory, and gated build/fix
+flow with pacing and ANSI colour. Edit `play.sh` to change wording; re-run the tape to re-render.
 ([`play-refusals.sh`](play-refusals.sh) holds an alternative *"four moments the gates refuse"* montage
 — point the tape's `bash play.sh` at it to render that instead.)
 
@@ -61,6 +60,6 @@ Drop `kimiflow.gif` next to this file and reference it from the top README, e.g.
 Keep it under ~3 MB so GitHub renders it inline; `agg` (`--font-size`, `--speed`) and `vhs`
 (`Set Width/Height`, `Set PlaybackSpeed`) both expose size/speed knobs.
 
-> The committed `kimiflow.gif` is the **scripted illustration** (Path B — the feature-build
-> walkthrough). Swap in a real Path-A capture when you have one: same filename, so the README picks it
+> The committed `kimiflow.gif` is the **scripted illustration** (Path B — the current core-flow
+> overview). Swap in a real Path-A capture when you have one: same filename, so the README picks it
 > up automatically.

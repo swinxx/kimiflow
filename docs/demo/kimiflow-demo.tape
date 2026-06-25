@@ -1,7 +1,7 @@
 # kimiflow-demo.tape — render the SCRIPTED ILLUSTRATION (play.sh) to a GIF.
-# play.sh walks a feature build (dark-mode toggle) through the 8 phases to the
-# commit-gate. This is a reconstruction for a clean branded loop, NOT a captured
-# model session. For a real run, see the asciinema steps in README.md.
+# play.sh walks the current core flow: launcher → project map/memory status →
+# gated feature/fix loop → commit-gate → learning loop. This is a reconstruction,
+# NOT a captured model session. For a real run, see docs/demo/README.md.
 #
 # Render:  vhs kimiflow-demo.tape        →   kimiflow.gif
 
@@ -22,7 +22,7 @@ Show
 Sleep 400ms
 
 Type "bash play.sh" Sleep 500ms Enter
-# play.sh prints for ~14s; then hold the completed frame ~7s so the last line
+# play.sh prints for ~17s; then hold the completed frame ~7s so the last line
 # is readable before the loop restarts (static frames cost ~nothing in a GIF).
-Sleep 14s
+Sleep 17s
 Sleep 7s

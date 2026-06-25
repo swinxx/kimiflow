@@ -85,9 +85,11 @@ Gives you `/kimiflow` (auto-discovered, no restart needed) — but **not** the h
 
 ## 30-second demo
 
-![kimiflow demo — building a dark-mode toggle through all 8 phases to the commit-gate](docs/demo/kimiflow.gif)
+![kimiflow demo — launcher, project map, memory recall, gates, commit stop, and learning loop](docs/demo/kimiflow.gif)
 
-> _Illustrative reconstruction_ — one feature (a dark-mode toggle) built gate by gate: clarify → research → plan → **plan-gate** → implement → verify → review → **commit-gate** (stops for your OK). Rendered via [`docs/demo/`](docs/demo/); a real capture replaces it later.
+> _Illustrative reconstruction_ — the current Kimiflow front door and core loop: launcher status →
+> project map + memory recall → mode choice → clarify/understand/plan → mechanical gates → **commit-gate**
+> (stops for your OK) → learning loop. Rendered via [`docs/demo/`](docs/demo/); a real capture replaces it later.
 
 The same gates on a **bug fix** — the other mode (full walkthrough: [`examples/02-risky-bugfix.md`](examples/02-risky-bugfix.md)):
 

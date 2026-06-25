@@ -507,7 +507,7 @@ append_learning_row() {
             and (.topic // "") == $topic
             and (.summary // "") == $summary
             and ((.evidence // []) == $evidence)
-            and ((.status // "current") != "archived")
+            and ((.status // "current") == "current")
           ))
         | .[0].id // ""
       ' "$learnings")"
@@ -806,8 +806,9 @@ cmd_verify_run() {
     esac
     shift
   done
+  need_jq
   root="$(resolve_root "$root")"
-  local run_dir review status reason
+  local run_dir review status reason learnings ids_json ids_count missing_ids missing_csv
   run_dir="$(resolve_run_dir "$root" "$run")"
   review="$run_dir/LEARNING-REVIEW.md"
   if [ ! -f "$review" ]; then
@@ -817,11 +818,31 @@ cmd_verify_run() {
   status="$(awk -F': ' '/^Status:/ {print $2; exit}' "$review")"
   case "$status" in
     recorded)
-      if grep -qE '^Recorded:[[:space:]]+learn_' "$review"; then
+      ids_json="$(awk '/^Recorded:[[:space:]]+learn_/ {print $2}' "$review" | jq -R . | jq -s .)"
+      ids_count="$(printf '%s\n' "$ids_json" | jq 'length')"
+      if [ "$ids_count" -eq 0 ]; then
+        printf 'LEARNING_REVIEW\tCLOSED\treason=missing_recorded_ids\tpath=%s\n' "$(rel_path "$root" "$review")"
+        return 1
+      fi
+      learnings="$root/.kimiflow/project/LEARNINGS.jsonl"
+      if [ ! -f "$learnings" ]; then
+        printf 'LEARNING_REVIEW\tCLOSED\treason=missing_learnings\tpath=%s\n' "$(rel_path "$root" "$review")"
+        return 1
+      fi
+      missing_ids="$(jq -Rsc --argjson ids "$ids_json" '
+        (
+          split("\n")
+          | map(select(length > 0) | (fromjson? // empty))
+          | map(select((.status // "current") == "current") | .id)
+        ) as $current
+        | [$ids[] | . as $id | select(($current | index($id)) == null)]
+      ' "$learnings")"
+      if [ "$(printf '%s\n' "$missing_ids" | jq 'length')" -eq 0 ]; then
         printf 'LEARNING_REVIEW\tOPEN\tstatus=recorded\tpath=%s\n' "$(rel_path "$root" "$review")"
         return 0
       fi
-      printf 'LEARNING_REVIEW\tCLOSED\treason=missing_recorded_ids\tpath=%s\n' "$(rel_path "$root" "$review")"
+      missing_csv="$(printf '%s\n' "$missing_ids" | jq -r 'join(",")')"
+      printf 'LEARNING_REVIEW\tCLOSED\treason=recorded_ids_missing_or_not_current\tids=%s\tpath=%s\n' "$missing_csv" "$(rel_path "$root" "$review")"
       return 1
       ;;
     skipped)

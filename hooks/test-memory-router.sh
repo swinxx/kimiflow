@@ -108,6 +108,34 @@ out="$(run_router review-run --run .kimiflow/demo-run --write)"
 after_count="$(wc -l < "$REPO/.kimiflow/project/LEARNINGS.jsonl" | tr -d '[:space:]')"
 [ "$before_count" = "$after_count" ] && pass "review_run_is_idempotent" || fail "review_run_is_idempotent"
 
+mkdir -p "$REPO/.kimiflow/fake-review"
+cat > "$REPO/.kimiflow/fake-review/LEARNING-REVIEW.md" <<'EOF'
+# Learning Review
+
+Run: .kimiflow/fake-review
+Status: recorded
+Generated: 2026-06-25T00:00:00Z
+
+Recorded: learn_missing
+EOF
+if run_router verify-run --run .kimiflow/fake-review >/dev/null 2>&1; then
+  fail "verify_run_blocks_missing_recorded_id"
+else
+  pass "verify_run_blocks_missing_recorded_id"
+fi
+
+cat >> "$REPO/.kimiflow/project/LEARNINGS.jsonl" <<'EOF'
+{"id":"learn_stale_duplicate","kind":"process","scope":"project","topic":"stale-memory","summary":"Stale learning should be reconfirmed as current.","evidence":["hooks/launcher-status.sh:1"],"confidence":"medium","sensitivity":"normal","last_verified":"2026-06-25","source_commit":"abc1234","status":"stale"}
+EOF
+before_count="$(wc -l < "$REPO/.kimiflow/project/LEARNINGS.jsonl" | tr -d '[:space:]')"
+out="$(run_router record --summary "Stale learning should be reconfirmed as current." --topic stale-memory --kind process --confidence high --sensitivity normal --evidence hooks/launcher-status.sh:1)"
+after_count="$(wc -l < "$REPO/.kimiflow/project/LEARNINGS.jsonl" | tr -d '[:space:]')"
+if [ "$after_count" -eq $((before_count + 1)) ] && printf '%s\n' "$out" | grep -q '^RECORDED	.kimiflow/project/LEARNINGS.jsonl	learn_'; then
+  pass "record_does_not_reuse_stale_learning"
+else
+  fail "record_does_not_reuse_stale_learning"
+fi
+
 mkdir -p "$REPO/.kimiflow/skip-run"
 out="$(run_router review-run --run .kimiflow/skip-run --write --skip "intentionally trivial run")"
 assert_jq "$out" '.status == "skipped" and .recorded_count == 0 and .written == true' "review_run_allows_explicit_skip"

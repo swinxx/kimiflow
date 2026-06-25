@@ -2,6 +2,17 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.33
+
+Harden the **Learning Loop close gate** after code review.
+
+### Fixed
+- `memory-router.sh verify-run` now validates every `Recorded: learn_*` ID against current rows in
+  `.kimiflow/project/LEARNINGS.jsonl` instead of trusting the review markdown alone.
+- Learning recording no longer reuses stale or superseded rows as proof of a fresh completed run; repeated
+  proof appends a new current row while current duplicates remain idempotent.
+- Memory-router tests cover forged/missing recorded IDs and stale-learning reconfirmation.
+
 ## 0.1.32
 
 Close the **Learning Loop** mechanically for completed Kimiflow runs.

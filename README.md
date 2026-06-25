@@ -39,11 +39,11 @@ Then **restart Claude Code** (or open a new session) and run `/kimiflow`. This i
 
 ### Codex — plugin skill **+** stable hooks
 
-From this repository checkout:
+Recommended public install:
 
 ```bash
-codex plugin marketplace add .
-bash hooks/install-codex-hooks.sh
+codex plugin marketplace add swinxx/kimiflow
+bash "${CODEX_HOME:-$HOME/.codex}/.tmp/marketplaces/kimiflow/hooks/install-codex-hooks.sh"
 ```
 
 Then open the Codex plugin browser (`/plugins` in the CLI, or **Plugins** in the Codex app), install **kimiflow** from the **kimiflow** marketplace, start a new thread, and invoke it explicitly:
@@ -53,7 +53,22 @@ $kimiflow Add a dark-mode toggle in settings
 $kimiflow --fix App crashes when opening an empty project
 ```
 
-`hooks/install-codex-hooks.sh` writes Kimiflow wrappers into `${CODEX_HOME:-~/.codex}/hooks`, the stable Codex hook surface, and pins them back to this plugin checkout with `KIMIFLOW_PLUGIN_ROOT`. Some Codex CLI versions expose marketplace management but not a non-interactive plugin install command; in that case the plugin browser/app install step is expected. Codex plugin-bundled hooks are also described in `hooks.json` for builds that enable `plugin_hooks`, but Kimiflow's safety gates do not rely on that experimental path.
+Update the marketplace later with:
+
+```bash
+codex plugin marketplace upgrade kimiflow
+```
+
+`hooks/install-codex-hooks.sh` writes Kimiflow wrappers into `${CODEX_HOME:-~/.codex}/hooks`, the stable Codex hook surface, and pins them back to the checkout it is run from with `KIMIFLOW_PLUGIN_ROOT`. Some Codex CLI versions expose marketplace management but not a non-interactive plugin install/update command; in that case the plugin browser/app install step is expected after the marketplace upgrade. Codex plugin-bundled hooks are also described in `hooks.json` for builds that enable `plugin_hooks`, but Kimiflow's safety gates do not rely on that experimental path.
+
+For local plugin development, register the checkout instead:
+
+```bash
+codex plugin marketplace add .
+bash hooks/install-codex-hooks.sh
+```
+
+Local path marketplaces show the newest local manifest in the plugin browser, but `codex plugin marketplace upgrade` only works for Git marketplaces. Use the Git marketplace (`swinxx/kimiflow`) for normal installs and repeatable CLI updates.
 
 The Codex port uses the same `.kimiflow/<slug>/` state, resolver scripts, commit-secret-gate, state-gate, and test-gate as the Claude Code plugin once the hook installer has run.
 
@@ -249,11 +264,11 @@ Dann **Claude Code neu starten** (oder neue Session) und `/kimiflow` aufrufen. D
 
 ### Codex — Plugin-Skill **+** stabile Hooks
 
-Aus diesem Repository-Checkout:
+Empfohlene öffentliche Installation:
 
 ```bash
-codex plugin marketplace add .
-bash hooks/install-codex-hooks.sh
+codex plugin marketplace add swinxx/kimiflow
+bash "${CODEX_HOME:-$HOME/.codex}/.tmp/marketplaces/kimiflow/hooks/install-codex-hooks.sh"
 ```
 
 Dann im Codex-Plugin-Browser (`/plugins` in der CLI oder **Plugins** in der Codex-App) **kimiflow** aus dem **kimiflow**-Marketplace installieren, einen neuen Thread starten und explizit aufrufen:
@@ -263,7 +278,22 @@ $kimiflow Dunkelmodus-Schalter in den Einstellungen
 $kimiflow --fix App stürzt ab beim Öffnen eines leeren Projekts
 ```
 
-`hooks/install-codex-hooks.sh` schreibt Kimiflow-Wrapper nach `${CODEX_HOME:-~/.codex}/hooks`, also in die stabile Codex-Hook-Oberfläche, und pinnt sie über `KIMIFLOW_PLUGIN_ROOT` zurück auf diesen Plugin-Checkout. Einige Codex-CLI-Versionen haben Marketplace-Verwaltung, aber keinen nicht-interaktiven Plugin-Install-Befehl; dann ist der Installationsschritt über Plugin-Browser/App normal. Plugin-gebündelte Codex-Hooks sind zusätzlich in `hooks.json` beschrieben, falls ein Build `plugin_hooks` aktiviert, aber Kimiflows Sicherheitsgates hängen nicht von diesem experimentellen Pfad ab.
+Später den Marketplace aktualisieren mit:
+
+```bash
+codex plugin marketplace upgrade kimiflow
+```
+
+`hooks/install-codex-hooks.sh` schreibt Kimiflow-Wrapper nach `${CODEX_HOME:-~/.codex}/hooks`, also in die stabile Codex-Hook-Oberfläche, und pinnt sie über `KIMIFLOW_PLUGIN_ROOT` zurück auf den Checkout, aus dem der Installer läuft. Einige Codex-CLI-Versionen haben Marketplace-Verwaltung, aber keinen nicht-interaktiven Plugin-Install-/Update-Befehl; dann ist der Installationsschritt über Plugin-Browser/App nach dem Marketplace-Upgrade normal. Plugin-gebündelte Codex-Hooks sind zusätzlich in `hooks.json` beschrieben, falls ein Build `plugin_hooks` aktiviert, aber Kimiflows Sicherheitsgates hängen nicht von diesem experimentellen Pfad ab.
+
+Für lokale Plugin-Entwicklung registrierst du stattdessen den Checkout:
+
+```bash
+codex plugin marketplace add .
+bash hooks/install-codex-hooks.sh
+```
+
+Lokale Pfad-Marketplaces zeigen im Plugin-Browser das neueste lokale Manifest, aber `codex plugin marketplace upgrade` funktioniert nur für Git-Marketplaces. Für normale Installationen und wiederholbare CLI-Updates ist der Git-Marketplace (`swinxx/kimiflow`) der richtige Weg.
 
 Der Codex-Port nutzt dieselbe `.kimiflow/<slug>/`-State-Struktur, dieselben Resolver-Scripts, denselben commit-secret-gate, state-gate und test-gate wie das Claude-Code-Plugin, sobald der Hook-Installer gelaufen ist.
 

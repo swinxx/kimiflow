@@ -86,8 +86,8 @@ rm -rf "$tmp1" "$tmp2" "$tmp_home"
 
 echo "== MANUAL (needs Codex app/CLI plugin browser) =="
 cat <<'MANUAL'
-  [ ] Add the repo/local marketplace that points at this plugin, then install kimiflow.
-  [ ] Run hooks/install-codex-hooks.sh once and confirm codex_hooks is enabled.
+  [ ] Add the Git marketplace (`codex plugin marketplace add swinxx/kimiflow`), then install kimiflow.
+  [ ] Run the stable hook installer from that marketplace checkout once.
   [ ] Start a new Codex thread and invoke "$kimiflow <tiny change>".
   [ ] Confirm Kimiflow launches only when explicitly requested.
   [ ] In a repo with .kimiflow/, attempting `git add .` is blocked by the installed stable Codex hook.

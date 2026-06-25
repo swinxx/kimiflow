@@ -2,6 +2,13 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## Unreleased
+
+### Changed
+- Codex install docs now recommend the Git marketplace (`swinxx/kimiflow`) for normal installs so
+  `codex plugin marketplace upgrade kimiflow` works. Local path marketplaces are documented as a
+  development mode because Codex shows the local manifest version but does not upgrade that source type.
+
 ## 0.1.25
 
 Ship **Project Intelligence** for kimiflow: a local project map, per-section staleness/refresh, and

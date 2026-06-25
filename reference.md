@@ -56,6 +56,8 @@ hygiene pass, not an implementation mode:
   / `git diff --name-status` from the map baseline to HEAD to find changed areas. Read only affected sections,
   recent relevant commits, and changed files; do not re-map the whole codebase unless the index is missing or
   invalid.
+- **Baseline count is context:** `maintenance.commits_since_project_map_baseline` is informational only. Use
+  `maintenance.reasons` and `project_map.status` to decide whether a refresh is recommended.
 - **Cross-tool history as hints:** if project-local workflow artifacts such as `.planning/`, `.gsd/`, roadmap
   logs, or similar tool ledgers exist, read their indexes/recent summaries first and treat them as hints to
   reconcile with the current code. Do not bulk-ingest another tool's full archive.

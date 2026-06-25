@@ -80,7 +80,12 @@ write_index "$BASE" "$(hash_file "$REPO/src/a.txt")"
 out="$(run_status)"
 assert_jq "$out" '.project_map.present == true and .project_map.depth == "standard" and .project_map.status == "current"' "current_map_reports_current"
 assert_jq "$out" '.repo.dirty == false' "ignored_kimiflow_does_not_dirty_repo"
-assert_jq "$out" '.maintenance.bring_current_recommended == false and .maintenance.commits_since_project_map == 0' "clean_current_repo_no_maintenance_recommended"
+assert_jq "$out" '.maintenance.bring_current_recommended == false and .maintenance.commits_since_project_map_baseline == 0' "clean_current_repo_no_maintenance_recommended"
+
+printf '# Docs\nmore\n' > "$REPO/docs/guide.md"
+( cd "$REPO" && git add docs/guide.md && git commit -q -m docs )
+out="$(run_status)"
+assert_jq "$out" '.project_map.status == "current" and .maintenance.bring_current_recommended == false and .maintenance.commits_since_project_map_baseline == 1' "baseline_commit_count_is_context_not_maintenance"
 
 printf 'two\n' > "$REPO/src/a.txt"
 out="$(run_status)"
@@ -155,7 +160,7 @@ out="$(run_status)"
 assert_jq "$out" '.runs.backlog == 1 and (.runs.items[] | select(.slug == "parked" and .stale_risk == "needs-revalidation"))' "backlog_run_needs_revalidation_when_affected_file_changed"
 
 reset_repo
-mkdir -p "$REPO/.kimiflow/legacy-active-done" "$REPO/.kimiflow/legacy-missing-done" "$REPO/.kimiflow/still-active"
+mkdir -p "$REPO/.kimiflow/legacy-active-done" "$REPO/.kimiflow/legacy-missing-done" "$REPO/.kimiflow/still-active" "$REPO/.kimiflow/not-done"
 cat > "$REPO/.kimiflow/legacy-active-done/STATE.md" <<'EOF'
 # STATE
 
@@ -176,8 +181,14 @@ Phase 0: done
 Phase 4: done
 Phase 5: open
 EOF
+cat > "$REPO/.kimiflow/not-done/STATE.md" <<'EOF'
+# STATE
+
+- **Status:** active
+- Phase 7: not done yet
+EOF
 out="$(run_status)"
-assert_jq "$out" '.runs.done == 2 and .runs.active == 1 and (.runs.items[] | select(.slug == "legacy-active-done" and .status == "done")) and (.runs.items[] | select(.slug == "legacy-missing-done" and .status == "done"))' "legacy_phase7_done_runs_inferred_done"
+assert_jq "$out" '.runs.done == 2 and .runs.active == 2 and (.runs.items[] | select(.slug == "legacy-active-done" and .status == "done")) and (.runs.items[] | select(.slug == "legacy-missing-done" and .status == "done")) and (.runs.items[] | select(.slug == "not-done" and .status == "active"))' "legacy_phase7_done_runs_inferred_done"
 assert_jq "$out" '.maintenance.bring_current_recommended == true and (.maintenance.reasons | index("active_runs"))' "active_runs_recommend_maintenance"
 
 reset_repo

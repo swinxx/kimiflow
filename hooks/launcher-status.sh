@@ -81,8 +81,8 @@ state_phase7_done() {
       line = tolower($0)
       gsub(/\r/, "", line)
       gsub(/\*\*/, "", line)
-      if (line ~ /^[[:space:]-]*phase[[:space:]]+7([[:space:]:(-]|$)/ && line ~ /done/) found = 1
-      if (line ~ /run complete/) found = 1
+      if (line ~ /^[[:space:]-]*phase[[:space:]]+7([[:space:]]*\([^)]*\))?[[:space:]]*:[[:space:]]*done([[:space:]]|$|[-.,;:])/) found = 1
+      if (line ~ /^[[:space:]]*(##[[:space:]]+)?run complete([[:space:]]|$|[-.,;:()])/) found = 1
     }
     END { exit(found ? 0 : 1) }
   ' "$file" 2>/dev/null
@@ -319,7 +319,7 @@ out="$(jq -n \
     maintenance: {
       bring_current_recommended: (($maintenance_reasons | length) > 0),
       reasons: $maintenance_reasons,
-      commits_since_project_map: $commits_since_map,
+      commits_since_project_map_baseline: $commits_since_map,
       workflow_artifacts: $workflow_artifacts
     },
     repo_docs: {present: $docs_present}

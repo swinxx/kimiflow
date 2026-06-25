@@ -2,6 +2,18 @@
 
 Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
+## 0.1.30
+
+Fix **launcher run hygiene edge cases** and clarify project-map baseline maintenance context.
+
+### Fixed
+- `hooks/launcher-status.sh` no longer infers `Status: done` from ambiguous Phase 7 lines such as
+  `Phase 7: not done yet`; only explicit `Phase 7: done` / `RUN COMPLETE` markers count.
+- Launcher maintenance JSON now reports `commits_since_project_map_baseline` as an informational baseline
+  count, so callers do not mistake it for a stale-map signal.
+- `hooks/test-launcher-status.sh` covers both the legacy Phase 7 completion inference and the ambiguous
+  `not done` regression case.
+
 ## 0.1.29
 
 Fix **launcher open-item counts for English project-map artifacts**.

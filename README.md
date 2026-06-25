@@ -139,6 +139,11 @@ Depths:
 
 The map is local and optional. Missing, skipped, or incomplete maps never block the normal kimiflow loop.
 
+If a map already exists, kimiflow checks it per section with `hooks/project-map-status.sh`. Sections can
+be `current`, `stale`, `potentially_stale`, or `unknown`; stale affected sections trigger a recommended
+but skippable delta refresh. Refresh updates only the selected section hashes/commit metadata, so future
+runs reuse the map without paying for a full rescan.
+
 ## Example
 
 **Feature:**
@@ -337,6 +342,11 @@ Tiefen:
 - `skip` — ohne Projektkarte weiterlaufen.
 
 Die Projektkarte ist lokal und optional. Fehlende, übersprungene oder unvollständige Maps blockieren den normalen kimiflow-Loop nie.
+
+Wenn eine Projektkarte existiert, prüft kimiflow sie pro Bereich mit `hooks/project-map-status.sh`.
+Bereiche können `current`, `stale`, `potentially_stale` oder `unknown` sein; stale betroffene Bereiche
+lösen einen empfohlenen, aber überspringbaren Delta-Refresh aus. Der Refresh aktualisiert nur Hashes und
+Commit-Metadaten der ausgewählten Bereiche, damit spätere Läufe die Map ohne Vollscan wiederverwenden.
 
 ## Beispiel
 

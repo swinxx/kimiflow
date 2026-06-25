@@ -328,6 +328,27 @@ authoritative cache for Slice 1.
 Use `NOT VERIFIED` for `baseline_commit` if there is no git repository. `sections` may be shallow in
 Slice 1; Slice 2 adds per-section staleness and hashes.
 
+**Section staleness (Slice 2):** each `sections.<name>` entry may carry the data that lets kimiflow
+refresh only the changed areas:
+```json
+{
+  "files": ["hooks/commit-secret-gate.sh"],
+  "prefixes": ["hooks/"],
+  "file_hashes": {
+    "hooks/commit-secret-gate.sh": "sha256:<content-hash>"
+  },
+  "last_scanned_commit": "cba4942",
+  "depends_on": ["git", "jq"],
+  "status": "current"
+}
+```
+
+Use stable section names that match how future work is scoped (`hooks`, `api`, `ui`, `testing`,
+`architecture`, `flows`, etc.). `files` are exact load-bearing paths. `prefixes` let the status
+resolver notice new files under known areas without reading the whole repo. `file_hashes` are content
+hashes for exact files; a matching hash can make an uncommitted but already-refreshed working-tree file
+current. `status` is one of `current|stale|potentially_stale|unknown`.
+
 `FACTS.jsonl` is the compact evidence layer. One JSON object per line, stable English keys, concise
 human text in the user's language:
 ```json
@@ -355,9 +376,37 @@ using filesystem tools (`rg`, `find`, `git`, manifest reads). Do not read `.env`
   what not to touch, and which unknowns remain.
 - Do not store speculative improvements in Slice 1. Improve/refactoring lenses are Slice 3 and opt-in.
 
-**Phase 2 consumption:** before fresh code exploration, read `INDEX.json`, then only the relevant
-`FACTS.jsonl` lines and markdown sections. If the map is absent or skipped, continue with the existing
-Phase 2 memory/codebase research path unchanged.
+**Staleness helper (Slice 2):** `hooks/project-map-status.sh` is the mechanical source for map status.
+Invoke it from the installed plugin root (Codex: set `KIMIFLOW_HOST=codex`, same root rule as other
+helpers):
+
+- `project-map-status.sh status` → emits `PROJECT_MAP<TAB>current|partially_stale|stale|unknown|missing`
+  plus one `SECTION` line per section with `current|stale|potentially_stale|unknown`.
+- `project-map-status.sh status --affected <path>` → same output, with `affected=yes/no` so Phase 2 can
+  ask only about stale sections that matter to the current feature/fix.
+- `project-map-status.sh refresh --section <name>...` → after the mapper has refreshed the selected
+  section artifacts, updates only those sections' `file_hashes`, `last_scanned_commit`, `status`, and
+  `updated_at`.
+
+Impact rules:
+- Exact section file deleted or hash-mismatched → `stale`.
+- Exact section file changed without a stored hash → `stale`.
+- New or unmapped file under a section prefix → `potentially_stale`.
+- Manifest/build config changed → `tech`/`stack`/`architecture`/`testing`/`quality`/`conventions`
+  `potentially_stale`.
+- Route/API/schema/migration path changed → `flows`/related flow section `stale`.
+- Invalid/missing commit data with no usable hashes → `unknown`.
+
+**Delta refresh (recommended, non-blocking):** If a normal feature/fix/audit touches a `stale` or
+`potentially_stale` affected section, offer a targeted refresh before Phase 2. On accept, read only the
+section's `files`/`prefixes`, update the relevant markdown/`FACTS.jsonl` entries, then run
+`project-map-status.sh refresh --section <name>...`. On decline/headless/no answer/`unknown`, continue
+with normal Phase-2 code exploration and note the status in `STATE.md`.
+
+**Phase 2 consumption:** before fresh code exploration, read `INDEX.json`, the status line from
+`project-map-status.sh`, then only the relevant `FACTS.jsonl` lines and markdown sections. If the map
+is absent, skipped, stale-but-declined, or unknown, continue with the existing Phase 2 memory/codebase
+research path unchanged.
 
 ---
 

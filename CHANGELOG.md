@@ -5,6 +5,10 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 ## Unreleased
 
 ### Added
+- **Project Map Staleness + Delta Refresh (Slice 2)** via `hooks/project-map-status.sh` and
+  `hooks/test-project-map-status.sh`. Kimiflow can now classify existing `.kimiflow/project/INDEX.json`
+  sections as `current`, `stale`, `potentially_stale`, or `unknown`, report affected stale sections, and
+  mark only selected sections refreshed by updating their hashes/commit metadata.
 - **Project Map Bootstrap (Slice 1)** docs/contract for a recommended, skippable project-intelligence
   cache under `.kimiflow/project/`. Kimiflow now documents `--project-map quick|standard|deep|skip`,
   the local artifacts (`INDEX.json`, `FACTS.jsonl`, `CODEBASE.md`, `ARCHITECTURE.md`, `CONVENTIONS.md`,

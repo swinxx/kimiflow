@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+# kimiflow — project-map staleness resolver. Orchestrator-invoked, not a hook.
+#
+# Usage:
+#   project-map-status.sh [status] [--index <path>] [--affected <path>]...
+#   project-map-status.sh refresh [--index <path>] --section <name>...
+#
+# Output is TSV-ish and stable:
+#   PROJECT_MAP <status> stale=<n> potentially_stale=<n> unknown=<n> affected_stale=<n> index=<path>
+#   SECTION     <name>   <status> affected=<yes|no|all> reason=<reason> paths=<csv|->
+#   REFRESHED   <name>   files=<n> commit=<sha|NOT VERIFIED>
+set -u
+
+usage() {
+  sed -n '1,14p' "$0" >&2
+}
+
+die() {
+  printf 'project-map-status: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+need_jq() {
+  command -v jq >/dev/null 2>&1 || die "jq is required" 2
+}
+
+repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print "sha256:" $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print "sha256:" $1}'
+  else
+    die "shasum or sha256sum is required" 2
+  fi
+}
+
+contains() {
+  local needle="$1"; shift
+  local item
+  for item in "$@"; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+join_csv() {
+  local out="" item
+  for item in "$@"; do
+    [ -n "$item" ] || continue
+    if [ -z "$out" ]; then out="$item"; else out="$out,$item"; fi
+  done
+  [ -n "$out" ] && printf '%s' "$out" || printf '-'
+}
+
+path_matches_prefix() {
+  local path="$1" prefix
+  shift
+  for prefix in "$@"; do
+    [ -n "$prefix" ] || continue
+    case "$path" in
+      "$prefix"|"$prefix"/*) return 0 ;;
+      *) case "$prefix" in */) case "$path" in "$prefix"*) return 0 ;; esac ;; esac ;;
+    esac
+  done
+  return 1
+}
+
+manifest_path() {
+  case "$1" in
+    package.json|package-lock.json|pnpm-lock.yaml|yarn.lock|bun.lockb|tsconfig*.json|Cargo.toml|Cargo.lock|pyproject.toml|requirements*.txt|uv.lock|go.mod|go.sum|Gemfile|Gemfile.lock|composer.json|composer.lock|pom.xml|build.gradle|settings.gradle|Makefile|Dockerfile|docker-compose*.yml|docker-compose*.yaml)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+flow_path() {
+  case "$1" in
+    *route*|*routes*|*api*|*schema*|*migration*|migrations/*|db/migrate/*)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+section_is_stackish() {
+  case "$1" in
+    tech|stack|dependencies|architecture|testing|quality|conventions)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+section_is_flowish() {
+  case "$1" in
+    flow|flows|routing|api|schema|migrations)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+git_commit_ok() {
+  local root="$1" commit="$2"
+  [ -n "$commit" ] && [ "$commit" != "NOT VERIFIED" ] || return 1
+  git -C "$root" cat-file -e "$commit^{commit}" >/dev/null 2>&1
+}
+
+collect_changed_paths() {
+  local root="$1" base="$2" status path old new
+  CHANGED_PATHS=()
+
+  if git_commit_ok "$root" "$base"; then
+    while IFS=$'\t' read -r status old new; do
+      [ -n "${status:-}" ] || continue
+      case "$status" in
+        R*|C*)
+          [ -n "${old:-}" ] && CHANGED_PATHS+=("$old")
+          [ -n "${new:-}" ] && CHANGED_PATHS+=("$new")
+          ;;
+        *)
+          [ -n "${old:-}" ] && CHANGED_PATHS+=("$old")
+          ;;
+      esac
+    done < <(git -C "$root" diff --name-status "$base" HEAD 2>/dev/null)
+  fi
+
+  while IFS= read -r path; do [ -n "$path" ] && CHANGED_PATHS+=("$path"); done < <(git -C "$root" diff --name-only --cached 2>/dev/null)
+  while IFS= read -r path; do [ -n "$path" ] && CHANGED_PATHS+=("$path"); done < <(git -C "$root" diff --name-only 2>/dev/null)
+  while IFS= read -r path; do [ -n "$path" ] && CHANGED_PATHS+=("$path"); done < <(git -C "$root" ls-files --others --exclude-standard 2>/dev/null)
+}
+
+read_section_list() {
+  local index="$1" section="$2" query="$3"
+  jq -r --arg s "$section" "$query" "$index" 2>/dev/null
+}
+
+section_status() {
+  local root="$1" index="$2" section="$3"
+  local base status reason affected path expected actual
+  local files hash_paths prefixes hit_paths paths_out
+  files=(); hash_paths=(); prefixes=(); hit_paths=()
+
+  while IFS= read -r path; do [ -n "$path" ] && files+=("$path"); done < <(
+    read_section_list "$index" "$section" '((.sections[$s].files // []) + ((.sections[$s].file_hashes // {}) | keys)) | unique[]'
+  )
+  while IFS= read -r path; do [ -n "$path" ] && hash_paths+=("$path"); done < <(
+    read_section_list "$index" "$section" '((.sections[$s].file_hashes // {}) | keys[])'
+  )
+  while IFS= read -r path; do [ -n "$path" ] && prefixes+=("$path"); done < <(
+    read_section_list "$index" "$section" '(.sections[$s].prefixes // [])[]'
+  )
+  if [ "${#prefixes[@]}" -eq 0 ]; then
+    for path in ${files[@]+"${files[@]}"}; do
+      case "$path" in
+        */*) prefixes+=("${path%/*}/") ;;
+        *) prefixes+=("$path") ;;
+      esac
+    done
+  fi
+
+  base="$(jq -r --arg s "$section" '.sections[$s].last_scanned_commit // .baseline_commit // "NOT VERIFIED"' "$index" 2>/dev/null)"
+  collect_changed_paths "$root" "$base"
+
+  status="current"; reason="clean"
+  if [ "${#files[@]}" -eq 0 ] && [ "${#prefixes[@]}" -eq 0 ]; then
+    status="unknown"; reason="no-section-files"
+  fi
+
+  for path in ${files[@]+"${files[@]}"}; do
+    if [ ! -e "$root/$path" ]; then
+      status="stale"; reason="deleted-section-file"; hit_paths+=("$path"); break
+    fi
+    expected="$(jq -r --arg s "$section" --arg p "$path" '.sections[$s].file_hashes[$p] // empty' "$index" 2>/dev/null)"
+    if [ -n "$expected" ]; then
+      actual="$(sha256_file "$root/$path")"
+      if [ "$actual" != "$expected" ]; then
+        status="stale"; reason="hash-mismatch"; hit_paths+=("$path"); break
+      fi
+    fi
+  done
+
+  if [ "$status" = "current" ]; then
+    for path in ${CHANGED_PATHS[@]+"${CHANGED_PATHS[@]}"}; do
+      if [ "${#files[@]}" -gt 0 ] && contains "$path" ${files[@]+"${files[@]}"}; then
+        if [ "${#hash_paths[@]}" -eq 0 ] || ! contains "$path" ${hash_paths[@]+"${hash_paths[@]}"}; then
+          if manifest_path "$path" && section_is_stackish "$section"; then
+            status="potentially_stale"; reason="manifest-or-build-config-changed"; hit_paths+=("$path"); break
+          else
+            status="stale"; reason="changed-section-file"; hit_paths+=("$path"); break
+          fi
+        fi
+      fi
+    done
+  fi
+
+  if [ "$status" = "current" ]; then
+    for path in ${CHANGED_PATHS[@]+"${CHANGED_PATHS[@]}"}; do
+      if { [ "${#files[@]}" -eq 0 ] || ! contains "$path" ${files[@]+"${files[@]}"}; } && \
+        [ "${#prefixes[@]}" -gt 0 ] && path_matches_prefix "$path" ${prefixes[@]+"${prefixes[@]}"}; then
+        status="potentially_stale"; reason="new-or-unmapped-file-under-prefix"; hit_paths+=("$path"); break
+      fi
+    done
+  fi
+
+  if [ "$status" = "current" ]; then
+    for path in ${CHANGED_PATHS[@]+"${CHANGED_PATHS[@]}"}; do
+      if manifest_path "$path" && section_is_stackish "$section"; then
+        status="potentially_stale"; reason="manifest-or-build-config-changed"; hit_paths+=("$path"); break
+      fi
+      if flow_path "$path" && section_is_flowish "$section"; then
+        status="stale"; reason="route-api-schema-or-migration-changed"; hit_paths+=("$path"); break
+      fi
+    done
+  fi
+
+  if [ "$status" = "current" ] && ! git_commit_ok "$root" "$base" && [ "${#hash_paths[@]}" -eq 0 ]; then
+    status="unknown"; reason="baseline-commit-not-verifiable"
+  fi
+
+  affected="all"
+  if [ "${#AFFECTED_PATHS[@]}" -gt 0 ]; then
+    affected="no"
+    for path in ${AFFECTED_PATHS[@]+"${AFFECTED_PATHS[@]}"}; do
+      if { [ "${#files[@]}" -gt 0 ] && contains "$path" ${files[@]+"${files[@]}"}; } || \
+        { [ "${#prefixes[@]}" -gt 0 ] && path_matches_prefix "$path" ${prefixes[@]+"${prefixes[@]}"}; }; then
+        affected="yes"; break
+      fi
+    done
+  fi
+
+  paths_out="$(join_csv ${hit_paths[@]+"${hit_paths[@]}"})"
+  printf 'SECTION\t%s\t%s\taffected=%s\treason=%s\tpaths=%s\n' \
+    "$section" "$status" "$affected" "$reason" "$paths_out"
+}
+
+mode="status"
+INDEX=""
+AFFECTED_PATHS=()
+REFRESH_SECTIONS=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    status|refresh) mode="$1" ;;
+    --index) shift; INDEX="${1:-}" ;;
+    --affected) shift; AFFECTED_PATHS+=("${1:-}") ;;
+    --section) shift; REFRESH_SECTIONS+=("${1:-}") ;;
+    --help|-h) usage; exit 0 ;;
+    *)
+      if [ "$mode" = "refresh" ]; then REFRESH_SECTIONS+=("$1"); else AFFECTED_PATHS+=("$1"); fi
+      ;;
+  esac
+  shift
+done
+
+need_jq
+ROOT="$(repo_root)"
+[ -n "$INDEX" ] || INDEX="$ROOT/.kimiflow/project/INDEX.json"
+
+if [ ! -f "$INDEX" ]; then
+  printf 'PROJECT_MAP\tmissing\tstale=0\tpotentially_stale=0\tunknown=0\taffected_stale=0\tindex=%s\n' "$INDEX"
+  exit 0
+fi
+
+if ! jq -e . "$INDEX" >/dev/null 2>&1; then
+  printf 'PROJECT_MAP\tunknown\tstale=0\tpotentially_stale=0\tunknown=1\taffected_stale=0\tindex=%s\n' "$INDEX"
+  exit 0
+fi
+
+if [ "$mode" = "refresh" ]; then
+  [ "${#REFRESH_SECTIONS[@]}" -gt 0 ] || while IFS= read -r s; do REFRESH_SECTIONS+=("$s"); done < <(jq -r '.sections // {} | keys[]' "$INDEX")
+  commit="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || printf 'NOT VERIFIED')"
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  for section in ${REFRESH_SECTIONS[@]+"${REFRESH_SECTIONS[@]}"}; do
+    jq -e --arg s "$section" '.sections[$s]' "$INDEX" >/dev/null 2>&1 || die "unknown section: $section"
+    files=()
+    while IFS= read -r path; do [ -n "$path" ] && files+=("$path"); done < <(
+      jq -r --arg s "$section" '((.sections[$s].files // []) + ((.sections[$s].file_hashes // {}) | keys)) | unique[]' "$INDEX"
+    )
+    hashes='{}'
+    count=0
+    for path in ${files[@]+"${files[@]}"}; do
+      if [ -f "$ROOT/$path" ]; then
+        h="$(sha256_file "$ROOT/$path")"
+        hashes="$(printf '%s\n' "$hashes" | jq --arg p "$path" --arg h "$h" '. + {($p): $h}')"
+        count=$((count + 1))
+      fi
+    done
+    tmp="$(mktemp)"
+    jq --arg s "$section" --arg commit "$commit" --arg now "$now" --argjson hashes "$hashes" '
+      .sections[$s].file_hashes = $hashes |
+      .sections[$s].last_scanned_commit = $commit |
+      .sections[$s].status = "current" |
+      .sections[$s].updated_at = $now
+    ' "$INDEX" > "$tmp" && mv "$tmp" "$INDEX"
+    printf 'REFRESHED\t%s\tfiles=%s\tcommit=%s\n' "$section" "$count" "$commit"
+  done
+  exit 0
+fi
+
+SECTIONS=()
+while IFS= read -r section; do [ -n "$section" ] && SECTIONS+=("$section"); done < <(jq -r '.sections // {} | keys[]' "$INDEX")
+
+if [ "${#SECTIONS[@]}" -eq 0 ]; then
+  printf 'PROJECT_MAP\tunknown\tstale=0\tpotentially_stale=0\tunknown=1\taffected_stale=0\tindex=%s\n' "$INDEX"
+  exit 0
+fi
+
+LINES=()
+stale=0; potential=0; unknown=0; affected_stale=0
+for section in ${SECTIONS[@]+"${SECTIONS[@]}"}; do
+  line="$(section_status "$ROOT" "$INDEX" "$section")"
+  LINES+=("$line")
+  case "$line" in
+    *$'\tstale\t'*) stale=$((stale + 1)) ;;
+    *$'\tpotentially_stale\t'*) potential=$((potential + 1)) ;;
+    *$'\tunknown\t'*) unknown=$((unknown + 1)) ;;
+  esac
+  case "$line" in
+    *$'\tstale\t'*"affected=yes"*|*$'\tpotentially_stale\t'*"affected=yes"*) affected_stale=$((affected_stale + 1)) ;;
+  esac
+done
+
+overall="current"
+if [ "$stale" -gt 0 ]; then
+  if [ "$stale" -eq "${#SECTIONS[@]}" ]; then overall="stale"; else overall="partially_stale"; fi
+elif [ "$potential" -gt 0 ]; then
+  overall="partially_stale"
+elif [ "$unknown" -gt 0 ]; then
+  overall="unknown"
+fi
+
+printf 'PROJECT_MAP\t%s\tstale=%s\tpotentially_stale=%s\tunknown=%s\taffected_stale=%s\tindex=%s\n' \
+  "$overall" "$stale" "$potential" "$unknown" "$affected_stale" "$INDEX"
+for line in ${LINES[@]+"${LINES[@]}"}; do printf '%s\n' "$line"; done

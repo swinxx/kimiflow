@@ -34,7 +34,7 @@ Never invoke helper scripts through a two-parent relative `hooks` path from the 
 Apply the canonical Kimiflow workflow from `$KIMIFLOW_PLUGIN_ROOT/SKILL.md` with these Codex substitutions:
 
 - `/kimiflow` in user-facing text means `$kimiflow` or an explicit "run Kimiflow" prompt in Codex.
-- `/kimiflow --project-map <quick|standard|deep|skip>` means `$kimiflow --project-map <quick|standard|deep|skip>` in Codex. A missing `.kimiflow/project/INDEX.json` on a non-trivial run should offer the same recommended, skippable Project Map Bootstrap described in the canonical workflow.
+- `/kimiflow --project-map <quick|standard|deep|skip>` means `$kimiflow --project-map <quick|standard|deep|skip>` in Codex. Missing maps, per-section staleness checks, and recommended-but-skippable delta refreshes use the same canonical Project Map rules and `hooks/project-map-status.sh`.
 - `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}` means the installed Kimiflow plugin root. In Codex, use `KIMIFLOW_PLUGIN_ROOT`.
 - When invoking Kimiflow helper scripts from Codex, set `KIMIFLOW_HOST=codex`.
 - `TaskCreate` / `TaskUpdate` means use Codex's task plan/status updates.

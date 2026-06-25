@@ -5,6 +5,7 @@
 #   memory-router.sh status [--root <path>] [--pretty]
 #   memory-router.sh recall --query <text>|--query-file <path> [--root <path>] [--max <n>] [--write <path>] [--pretty]
 #   memory-router.sh history [--query <text>|--query-file <path>] [--root <path>] [--max <n>] [--write] [--pretty]
+#   memory-router.sh metrics [--root <path>] [--pretty]
 #   memory-router.sh classify --input <path>|--text <text> [--pretty]
 #   memory-router.sh record --summary <text> --topic <topic> --evidence <ref>... [--root <path>] [--kind <kind>] [--scope <scope>] [--confidence <level>] [--sensitivity <level>] [--status <status>]
 #   memory-router.sh review-run --run <path> [--root <path>] [--write] [--pretty] [--skip <reason>]
@@ -19,7 +20,7 @@
 set -u
 
 usage() {
-  sed -n '1,16p' "$0" >&2
+  sed -n '1,17p' "$0" >&2
 }
 
 die() {
@@ -187,27 +188,57 @@ usage_summary_json() {
       present: false,
       path: $path,
       tracked_items: 0,
-      total_uses: 0,
-      last_used_at: null,
-      by_kind: {}
-    }'
-    return 0
-  fi
+	      total_uses: 0,
+	      last_used_at: null,
+	      by_kind: {},
+	      events_tracked: 0,
+	      by_event: {},
+	      economics: {
+	        recall_writes: 0,
+	        history_writes: 0,
+	        total_hit_count: 0,
+	        estimated_output_tokens: 0,
+	        last_event_at: null
+	      },
+	      hot_items: 0
+	    }'
+	    return 0
+	  fi
 
-  jq '
-    (.items // {}) as $items
-    | {
-        present: true,
-        path: ".kimiflow/project/MEMORY-USAGE.json",
-        tracked_items: ($items | length),
-        total_uses: ([$items[]?.use_count // 0] | add // 0),
-        last_used_at: ([$items[]?.last_used_at // empty] | sort | last // null),
-        by_kind: (
-          reduce ($items[]?) as $item ({}; ($item.kind // "unknown") as $kind | .[$kind] = ((.[$kind] // 0) + 1))
-        )
-      }
-  ' "$usage_file"
-}
+	  jq '
+	    (.items // {}) as $items
+	    | (.events // []) as $events
+	    | {
+	        present: true,
+	        path: ".kimiflow/project/MEMORY-USAGE.json",
+	        tracked_items: ($items | length),
+	        total_uses: ([$items[]?.use_count // 0] | add // 0),
+	        last_used_at: ([$items[]?.last_used_at // empty] | sort | last // null),
+	        by_kind: (
+	          reduce ($items[]?) as $item ({}; ($item.kind // "unknown") as $kind | .[$kind] = ((.[$kind] // 0) + 1))
+	        ),
+	        events_tracked: ($events | length),
+	        by_event: (
+	          reduce ($events[]?) as $event ({};
+	            ($event.kind // "unknown") as $kind
+	            | .[$kind] = ((.[$kind] // {writes: 0, hits: 0, estimated_tokens: 0, last_at: null})
+	              | .writes += 1
+	              | .hits += ($event.hit_count // 0)
+	              | .estimated_tokens += ($event.estimated_tokens // 0)
+	              | .last_at = ([.last_at, ($event.at // null)] | map(select(. != null)) | sort | last // null))
+	          )
+	        ),
+	        economics: {
+	          recall_writes: ([$events[]? | select((.kind // "") == "recall")] | length),
+	          history_writes: ([$events[]? | select((.kind // "") == "history")] | length),
+	          total_hit_count: ([$events[]?.hit_count // 0] | add // 0),
+	          estimated_output_tokens: ([$events[]?.estimated_tokens // 0] | add // 0),
+	          last_event_at: ([$events[]?.at // empty] | sort | last // null)
+	        },
+	        hot_items: ($items | to_entries | map(select((.value.use_count // 0) > 1)) | length)
+	      }
+	  ' "$usage_file"
+	}
 
 learning_lifecycle_json() {
   local learnings="$1" usage_file="$2"
@@ -245,19 +276,23 @@ learning_lifecycle_json() {
       | map(select(length > 0) | (fromjson? // empty))
       | map(select((.status // "current") == "current")) as $current
       | ($current | map(.id // "") | map(select(length > 0))) as $ids
-      | ($ids | map(select(($usage["learning:" + .] // null) != null))) as $used
-      | ($current | map(select(($cutoff != "") and ((.last_verified // "") < $cutoff))) | map(.id // "")) as $stale_ids
-      | {
-          stale_after_days: $stale_after,
-          cutoff_date: (if $cutoff == "" then null else $cutoff end),
-          current: ($current | length),
-          stale_candidates: ($stale_ids | length),
-          stale_candidate_ids: $stale_ids,
-          unused_current: (($ids | length) - ($used | length)),
-          used_current: ($used | length)
-        }
-    ' "$learnings"
-}
+	      | ($ids | map(select(($usage["learning:" + .] // null) != null))) as $used
+	      | ($ids | map(select(($usage["learning:" + .] // null) == null))) as $unused
+	      | ($current | map(select(($cutoff != "") and ((.last_verified // "") < $cutoff))) | map(.id // "")) as $stale_ids
+	      | {
+	          stale_after_days: $stale_after,
+	          cutoff_date: (if $cutoff == "" then null else $cutoff end),
+	          current: ($current | length),
+	          stale_candidates: ($stale_ids | length),
+	          stale_candidate_ids: $stale_ids,
+	          unused_current: ($unused | length),
+	          unused_current_ids: ($unused[:20]),
+	          cold_candidate_ids: ($unused[:10]),
+	          used_current: ($used | length),
+	          used_current_ids: ($used[:20])
+	        }
+	    ' "$learnings"
+	}
 
 provider_manifest_json() {
   local file="$1"
@@ -1242,6 +1277,7 @@ write_history_markdown() {
 
 update_usage_metrics() {
   local root="$1" hits="$2"
+  local event_kind="${3:-recall}"
   local project="$root/.kimiflow/project"
   local usage_file="$project/MEMORY-USAGE.json"
   local now current updates tmp
@@ -1250,7 +1286,7 @@ update_usage_metrics() {
   if [ -f "$usage_file" ] && jq -e . "$usage_file" >/dev/null 2>&1; then
     current="$(cat "$usage_file")"
   else
-    current="$(jq -n '{schema_version: 1, updated_at: null, items: {}}')"
+    current="$(jq -n '{schema_version: 1, updated_at: null, items: {}, events: []}')"
   fi
   updates="$(printf '%s\n' "$hits" | jq '
     def hit_key:
@@ -1270,24 +1306,37 @@ update_usage_metrics() {
     })
   ')"
   tmp="$(mktemp "${usage_file}.tmp.XXXXXX")"
-  jq \
-    --arg now "$now" \
-    --argjson updates "$updates" \
-    '
-      .schema_version = 1
-      | .updated_at = $now
-      | .items = (.items // {})
-      | reduce $updates[] as $update (.;
-          .items[$update.key] = (
-            (.items[$update.key] // {})
-            + $update.value
-            + {
-                use_count: (((.items[$update.key].use_count // 0) + 1)),
-                last_used_at: $now
-              }
-          )
-        )
-    ' <<EOF > "$tmp"
+	  jq \
+	    --arg now "$now" \
+	    --arg event_kind "$event_kind" \
+	    --argjson updates "$updates" \
+	    '
+	      .schema_version = 1
+	      | .updated_at = $now
+	      | .items = (.items // {})
+	      | .events = (.events // [])
+	      | reduce $updates[] as $update (.;
+	          .items[$update.key] = (
+	            (.items[$update.key] // {})
+	            + $update.value
+	            + {
+	                use_count: (((.items[$update.key].use_count // 0) + 1)),
+	                last_used_at: $now
+	              }
+	          )
+	        )
+	      | .events = (
+	          .events
+	          + [{
+	              kind: $event_kind,
+	              at: $now,
+	              hit_count: ($updates | length),
+	              estimated_tokens: ([$updates[]? | (((.value.title // "") + " " + (.value.summary // "")) | gsub("[^A-Za-z0-9_]+"; " ") | split(" ") | map(select(length > 0)) | length)] | add // 0),
+	              keys: ($updates | map(.key) | unique)
+	            }]
+	          | .[-100:]
+	        )
+	    ' <<EOF > "$tmp"
 $current
 EOF
   mv "$tmp" "$usage_file"
@@ -1481,7 +1530,7 @@ cmd_recall() {
     esac
     write_recall_markdown "$write_path" "$json"
     usage_hits="$(printf '%s\n' "$json" | jq '[.sources.learnings.hits[], .sources.index.hits[], .sources.history.hits[]]')"
-    update_usage_metrics "$root" "$usage_hits"
+    update_usage_metrics "$root" "$usage_hits" "recall"
   fi
   json_print "$json" "$pretty"
 }
@@ -1547,9 +1596,25 @@ cmd_history() {
   if [ "$write" -eq 1 ]; then
     printf '%s\n' "$out" | jq . > "$json_path"
     write_history_markdown "$md_path" "$out"
-    update_usage_metrics "$root" "$hits"
+    update_usage_metrics "$root" "$hits" "history"
   fi
   json_print "$out" "$pretty"
+}
+
+cmd_metrics() {
+  local root="" pretty=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --root) shift; root="${1:-}" ;;
+      --pretty) pretty=1 ;;
+      --help|-h) usage; exit 0 ;;
+      *) die "metrics: unknown argument: $1" 2 ;;
+    esac
+    shift
+  done
+  need_jq
+  root="$(resolve_root "$root")"
+  json_print "$(usage_summary_json "$root/.kimiflow/project/MEMORY-USAGE.json")" "$pretty"
 }
 
 classify_text() {
@@ -2214,30 +2279,47 @@ review_candidate_json() {
 
 write_bounded_memory() {
   local root="$1" budget="${KIMIFLOW_MEMORY_BUDGET:-900}"
-  local project memory learnings body max_items words
+  local project memory learnings usage_file usage body max_items words
   project="$root/.kimiflow/project"
   memory="$project/MEMORY.md"
   learnings="$project/LEARNINGS.jsonl"
+  usage_file="$project/MEMORY-USAGE.json"
   [ -f "$learnings" ] || return 0
   mkdir -p "$project"
 
-  max_items=8
+  max_items="${KIMIFLOW_MEMORY_ALWAYS_ON_MAX_ITEMS:-8}"
+  case "$max_items" in ''|*[!0-9]*) max_items=8 ;; esac
+  [ "$max_items" -gt 0 ] || max_items=8
+  usage='{}'
+  if [ -f "$usage_file" ] && jq -e . "$usage_file" >/dev/null 2>&1; then
+    usage="$(jq -c '.items // {}' "$usage_file")"
+  fi
   while :; do
-    body="$(jq -Rsc --argjson max "$max_items" '
+    body="$(jq -Rsc --argjson max "$max_items" --argjson usage "$usage" '
       split("\n")
       | map(select(length > 0) | (fromjson? // empty))
+      | to_entries
+      | map(. as $entry
+        | $entry.value
+        | . + {
+            _row_index: $entry.key,
+            _usage_count: ($usage["learning:" + (.id // "")].use_count // 0)
+          })
       | map(select((.status // "current") == "current"))
       | map(select((.sensitivity // "normal") != "security" and (.sensitivity // "normal") != "private"))
-      | reverse
+      | sort_by([
+          - (._usage_count // 0),
+          (if (.confidence // "") == "high" then 0 elif (.confidence // "") == "medium" then 1 else 2 end),
+          - (._row_index // 0)
+        ])
       | .[:$max]
-      | reverse
       | map("- [" + (.topic // "uncategorized") + " · " + (.kind // "learning") + "] " + ((.summary // "") | tostring | .[0:220]) + " (evidence: " + (((.evidence // []) | .[0] // "NOT VERIFIED") | tostring) + ")")
       | join("\n")
     ' "$learnings")"
     {
       printf '# Project Memory\n\n'
       printf 'Generated: %s\n' "$(iso_now)"
-      printf 'Policy: bounded always-on summary; raw/private/security learnings stay in LEARNINGS.jsonl and are recalled on demand.\n\n'
+      printf 'Policy: bounded always-on summary prioritized by use, confidence, and recency; raw/private/security learnings stay in LEARNINGS.jsonl and are recalled on demand.\n\n'
       printf '## Always-On Learnings\n\n'
       if [ -n "$body" ]; then
         printf '%s\n' "$body"
@@ -3409,6 +3491,7 @@ case "$cmd" in
   status) cmd_status "$@" ;;
   recall) cmd_recall "$@" ;;
   history) cmd_history "$@" ;;
+  metrics) cmd_metrics "$@" ;;
   classify) cmd_classify "$@" ;;
   record) cmd_record "$@" ;;
   review-run) cmd_review_run "$@" ;;

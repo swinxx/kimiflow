@@ -20,6 +20,12 @@ if ! command -v jq >/dev/null 2>&1; then
   echo "SKIP: jq not installed — memory-router uses jq"; exit 0
 fi
 
+# Keep host-local vault/auth configuration from changing deterministic provider fixtures.
+unset OBSIDIAN_API_KEY KIMIFLOW_OBSIDIAN_API_KEY
+unset KIMIFLOW_VAULT_AUTHENTICATED KIMIFLOW_OBSIDIAN_AUTHENTICATED
+unset KIMIFLOW_VAULT_MCP_AVAILABLE KIMIFLOW_OBSIDIAN_MCP_AVAILABLE
+unset KIMIFLOW_VAULT_AVAILABLE KIMIFLOW_OBSIDIAN_URL
+
 reset_repo() {
   rm -rf "$REPO"
   mkdir -p "$REPO/src" "$REPO/hooks" "$REPO/.kimiflow/project"
@@ -132,9 +138,13 @@ out="$(run_router history --query "optional provider" --write)"
 assert_jq "$out" '.status == "written" and (.hits | map(select(.artifact == "PLAN.md")) | length >= 1)' "history_searches_run_artifacts"
 [ -f "$REPO/.kimiflow/project/RUN-HISTORY.json" ] && [ -f "$REPO/.kimiflow/project/RUN-HISTORY.md" ] && pass "history_writes_snapshot" || fail "history_writes_snapshot"
 assert_jq "$(cat "$REPO/.kimiflow/project/MEMORY-USAGE.json")" '.items | to_entries | map(select(.value.kind == "run_artifact")) | length >= 1' "history_write_records_usage"
+assert_jq "$(cat "$REPO/.kimiflow/project/MEMORY-USAGE.json")" '.events | map(select(.kind == "history" and .hit_count >= 1 and .estimated_tokens >= 1)) | length >= 1' "history_write_records_usage_event"
 out="$(run_router recall --query "optional provider" --max 10 --write .kimiflow/project/RECALL.md)"
 assert_jq "$out" '.sources.history.count >= 1' "recall_includes_run_history_hits"
 assert_jq "$(cat "$REPO/.kimiflow/project/MEMORY-USAGE.json")" '.items | to_entries | map(select(.value.kind == "run_artifact" and .value.use_count >= 1)) | length >= 1' "recall_write_updates_usage_metrics"
+assert_jq "$(cat "$REPO/.kimiflow/project/MEMORY-USAGE.json")" '.events | map(select(.kind == "recall" and .hit_count >= 1 and (.keys | length >= 1))) | length >= 1' "recall_write_records_usage_event"
+out="$(run_router metrics)"
+assert_jq "$out" '.events_tracked >= 2 and .economics.recall_writes >= 1 and .economics.history_writes >= 1 and .economics.estimated_output_tokens >= 1 and (.by_event.recall.writes >= 1)' "metrics_reports_recall_history_economics"
 
 out="$(run_router provider status)"
 assert_jq "$out" '.available == false and .type == "none"' "provider_status_defaults_local_only"
@@ -484,6 +494,29 @@ if [ "$after_count" -eq $((before_count + 1)) ] && printf '%s\n' "$out" | grep -
 else
   fail "record_does_not_reuse_stale_learning"
 fi
+
+reset_repo
+cat > "$REPO/.kimiflow/project/LEARNINGS.jsonl" <<'EOF'
+{"id":"learn_cold_one","kind":"process","scope":"project","topic":"memory-rank","summary":"Cold learning one should fall out of a tiny always-on memory budget.","evidence":["src/a.txt:1"],"confidence":"medium","sensitivity":"normal","last_verified":"2026-06-25","status":"current"}
+{"id":"learn_hot","kind":"process","scope":"project","topic":"memory-rank","summary":"Hot reusable learning should stay in always-on memory when usage data exists.","evidence":["src/a.txt:1"],"confidence":"medium","sensitivity":"normal","last_verified":"2026-06-25","status":"current"}
+{"id":"learn_cold_two","kind":"process","scope":"project","topic":"memory-rank","summary":"Cold learning two should fall out of a tiny always-on memory budget.","evidence":["src/a.txt:1"],"confidence":"high","sensitivity":"normal","last_verified":"2026-06-25","status":"current"}
+EOF
+cat > "$REPO/.kimiflow/project/MEMORY-USAGE.json" <<'EOF'
+{"schema_version":1,"updated_at":"2026-06-25T00:00:00Z","items":{"learning:learn_hot":{"kind":"process","source":"","title":"Hot reusable learning should stay","ref":"src/a.txt:1","summary":"Hot reusable learning should stay in always-on memory when usage data exists.","use_count":3,"last_used_at":"2026-06-25T00:00:00Z"}},"events":[]}
+EOF
+KIMIFLOW_MEMORY_ALWAYS_ON_MAX_ITEMS=2 run_router record --summary "Fresh high-confidence memory ranking learning should also fit in the tiny always-on memory budget." --topic memory-rank --kind process --confidence high --sensitivity normal --evidence src/a.txt:1 >/dev/null
+if grep -q "Hot reusable learning should stay" "$REPO/.kimiflow/project/MEMORY.md"; then
+  pass "always_on_memory_prefers_used_learning"
+else
+  fail "always_on_memory_prefers_used_learning"
+fi
+if grep -q "Cold learning one should fall out" "$REPO/.kimiflow/project/MEMORY.md"; then
+  fail "always_on_memory_excludes_cold_learning_when_budget_tiny"
+else
+  pass "always_on_memory_excludes_cold_learning_when_budget_tiny"
+fi
+out="$(run_router status)"
+assert_jq "$out" '.lifecycle.unused_current >= 1 and (.lifecycle.cold_candidate_ids | index("learn_cold_one"))' "status_reports_cold_learning_candidates"
 
 mkdir -p "$REPO/.kimiflow/skip-run"
 out="$(run_router review-run --run .kimiflow/skip-run --write --skip "intentionally trivial run")"

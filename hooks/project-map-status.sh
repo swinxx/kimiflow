@@ -3,16 +3,18 @@
 #
 # Usage:
 #   project-map-status.sh [status] [--index <path>] [--affected <path>]...
+#   project-map-status.sh coverage [--index <path>] [--affected <path>]...
 #   project-map-status.sh refresh [--index <path>] --section <name>...
 #
 # Output is TSV-ish and stable:
 #   PROJECT_MAP <status> stale=<n> potentially_stale=<n> unknown=<n> affected_stale=<n> index=<path>
+#   PROJECT_MAP_COVERAGE <status> affected=<n> mapped=<n> unmapped=<n> affected_stale=<n> affected_unknown=<n> phase2_depth=<compressed|targeted|full> reason=<reason> index=<path>
 #   SECTION     <name>   <status> affected=<yes|no|all> reason=<reason> paths=<csv|->
 #   REFRESHED   <name>   files=<n> commit=<sha|NOT VERIFIED>
 set -u
 
 usage() {
-  sed -n '1,14p' "$0" >&2
+  sed -n '1,15p' "$0" >&2
 }
 
 die() {
@@ -231,8 +233,37 @@ section_status() {
   fi
 
   paths_out="$(join_csv ${hit_paths[@]+"${hit_paths[@]}"})"
-  printf 'SECTION\t%s\t%s\taffected=%s\treason=%s\tpaths=%s\n' \
-    "$section" "$status" "$affected" "$reason" "$paths_out"
+	  printf 'SECTION\t%s\t%s\taffected=%s\treason=%s\tpaths=%s\n' \
+	    "$section" "$status" "$affected" "$reason" "$paths_out"
+	}
+
+build_map_scope() {
+  local path
+  MAP_FILES=()
+  MAP_PREFIXES=()
+  while IFS= read -r path; do [ -n "$path" ] && MAP_FILES+=("$path"); done < <(
+    jq -r '[.sections[]? | (.files // [])[]?, ((.file_hashes // {}) | keys[]?)] | unique[]' "$INDEX" 2>/dev/null
+  )
+  while IFS= read -r path; do [ -n "$path" ] && MAP_PREFIXES+=("$path"); done < <(
+    jq -r '[.sections[]? | (.prefixes // [])[]?] | unique[]' "$INDEX" 2>/dev/null
+  )
+  for path in ${MAP_FILES[@]+"${MAP_FILES[@]}"}; do
+    case "$path" in
+      */*) MAP_PREFIXES+=("${path%/*}/") ;;
+      *) MAP_PREFIXES+=("$path") ;;
+    esac
+  done
+}
+
+path_is_mapped() {
+  local path="$1"
+  if [ "${#MAP_FILES[@]}" -gt 0 ] && contains "$path" ${MAP_FILES[@]+"${MAP_FILES[@]}"}; then
+    return 0
+  fi
+  if [ "${#MAP_PREFIXES[@]}" -gt 0 ] && path_matches_prefix "$path" ${MAP_PREFIXES[@]+"${MAP_PREFIXES[@]}"}; then
+    return 0
+  fi
+  return 1
 }
 
 mode="status"
@@ -242,7 +273,7 @@ REFRESH_SECTIONS=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    status|refresh) mode="$1" ;;
+    status|coverage|refresh) mode="$1" ;;
     --index) shift; INDEX="${1:-}" ;;
     --affected) shift; AFFECTED_PATHS+=("${1:-}") ;;
     --section) shift; REFRESH_SECTIONS+=("${1:-}") ;;
@@ -258,13 +289,34 @@ need_jq
 ROOT="$(repo_root)"
 [ -n "$INDEX" ] || INDEX="$ROOT/.kimiflow/project/INDEX.json"
 
+if [ "${#AFFECTED_PATHS[@]}" -gt 0 ]; then
+  i=0
+  while [ "$i" -lt "${#AFFECTED_PATHS[@]}" ]; do
+    path="${AFFECTED_PATHS[$i]}"
+    case "$path" in
+      "$ROOT"/*) path="${path#$ROOT/}" ;;
+      ./*) path="${path#./}" ;;
+    esac
+    AFFECTED_PATHS[$i]="$path"
+    i=$((i + 1))
+  done
+fi
+
 if [ ! -f "$INDEX" ]; then
-  printf 'PROJECT_MAP\tmissing\tstale=0\tpotentially_stale=0\tunknown=0\taffected_stale=0\tindex=%s\n' "$INDEX"
+  if [ "$mode" = "coverage" ]; then
+    printf 'PROJECT_MAP_COVERAGE\tmissing\taffected=%s\tmapped=0\tunmapped=%s\taffected_stale=0\taffected_unknown=0\tphase2_depth=full\treason=missing-index\tindex=%s\n' "${#AFFECTED_PATHS[@]}" "${#AFFECTED_PATHS[@]}" "$INDEX"
+  else
+    printf 'PROJECT_MAP\tmissing\tstale=0\tpotentially_stale=0\tunknown=0\taffected_stale=0\tindex=%s\n' "$INDEX"
+  fi
   exit 0
 fi
 
 if ! jq -e . "$INDEX" >/dev/null 2>&1; then
-  printf 'PROJECT_MAP\tunknown\tstale=0\tpotentially_stale=0\tunknown=1\taffected_stale=0\tindex=%s\n' "$INDEX"
+  if [ "$mode" = "coverage" ]; then
+    printf 'PROJECT_MAP_COVERAGE\tunknown\taffected=%s\tmapped=0\tunmapped=%s\taffected_stale=0\taffected_unknown=0\tphase2_depth=full\treason=invalid-index\tindex=%s\n' "${#AFFECTED_PATHS[@]}" "${#AFFECTED_PATHS[@]}" "$INDEX"
+  else
+    printf 'PROJECT_MAP\tunknown\tstale=0\tpotentially_stale=0\tunknown=1\taffected_stale=0\tindex=%s\n' "$INDEX"
+  fi
   exit 0
 fi
 
@@ -309,7 +361,7 @@ if [ "${#SECTIONS[@]}" -eq 0 ]; then
 fi
 
 LINES=()
-stale=0; potential=0; unknown=0; affected_stale=0
+stale=0; potential=0; unknown=0; affected_stale=0; affected_unknown=0
 for section in ${SECTIONS[@]+"${SECTIONS[@]}"}; do
   line="$(section_status "$ROOT" "$INDEX" "$section")"
   LINES+=("$line")
@@ -321,6 +373,9 @@ for section in ${SECTIONS[@]+"${SECTIONS[@]}"}; do
   case "$line" in
     *$'\tstale\t'*"affected=yes"*|*$'\tpotentially_stale\t'*"affected=yes"*) affected_stale=$((affected_stale + 1)) ;;
   esac
+  case "$line" in
+    *$'\tunknown\t'*"affected=yes"*) affected_unknown=$((affected_unknown + 1)) ;;
+  esac
 done
 
 overall="current"
@@ -330,6 +385,47 @@ elif [ "$potential" -gt 0 ]; then
   overall="partially_stale"
 elif [ "$unknown" -gt 0 ]; then
   overall="unknown"
+fi
+
+if [ "$mode" = "coverage" ]; then
+  build_map_scope
+  affected="${#AFFECTED_PATHS[@]}"
+  mapped=0
+  unmapped=0
+  for path in ${AFFECTED_PATHS[@]+"${AFFECTED_PATHS[@]}"}; do
+    if path_is_mapped "$path"; then
+      mapped=$((mapped + 1))
+    else
+      unmapped=$((unmapped + 1))
+    fi
+  done
+  coverage_status="covered"
+  phase2_depth="compressed"
+  reason="affected-paths-covered-current"
+  if [ "$affected" -eq 0 ]; then
+    coverage_status="unscoped"
+    phase2_depth="targeted"
+    reason="no-affected-paths"
+  elif [ "$unmapped" -gt 0 ]; then
+    coverage_status="partial"
+    phase2_depth="full"
+    reason="unmapped-affected-paths"
+  elif [ "$affected_stale" -gt 0 ]; then
+    coverage_status="stale"
+    phase2_depth="targeted"
+    reason="mapped-but-stale"
+  elif [ "$affected_unknown" -gt 0 ]; then
+    coverage_status="unknown"
+    phase2_depth="targeted"
+    reason="mapped-but-unknown"
+  elif [ "$overall" != "current" ]; then
+    coverage_status="covered"
+    phase2_depth="compressed"
+    reason="affected-paths-covered-unrelated-map-staleness"
+  fi
+  printf 'PROJECT_MAP_COVERAGE\t%s\taffected=%s\tmapped=%s\tunmapped=%s\taffected_stale=%s\taffected_unknown=%s\tphase2_depth=%s\treason=%s\tindex=%s\n' \
+    "$coverage_status" "$affected" "$mapped" "$unmapped" "$affected_stale" "$affected_unknown" "$phase2_depth" "$reason" "$INDEX"
+  exit 0
 fi
 
 printf 'PROJECT_MAP\t%s\tstale=%s\tpotentially_stale=%s\tunknown=%s\taffected_stale=%s\tindex=%s\n' \

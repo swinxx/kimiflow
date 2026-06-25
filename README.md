@@ -174,7 +174,9 @@ The map is local and optional. Missing, skipped, or incomplete maps never block 
 If a map already exists, kimiflow checks it per section with `hooks/project-map-status.sh`. Sections can
 be `current`, `stale`, `potentially_stale`, or `unknown`; stale affected sections trigger a recommended
 but skippable delta refresh. Refresh updates only the selected section hashes/commit metadata, so future
-runs reuse the map without paying for a full rescan.
+runs reuse the map without paying for a full rescan. Once likely affected paths are known,
+`project-map-status.sh coverage --affected <path>...` recommends Phase-2 depth: `compressed` for mapped/current
+code, `targeted` for mapped but stale/unknown sections, and `full` for unmapped or missing/invalid maps.
 
 Standalone map runs can also choose a focus: codebase, architecture, docs, or opt-in improvement ideas.
 Storage is explicit: `kimiflow` only, `kimiflow + Vault`, or `kimiflow + Vault + repo docs`. The local
@@ -197,7 +199,10 @@ Kimiflow also keeps a bounded local memory under `.kimiflow/project/`: `MEMORY.m
 run-local `LEARNING-REVIEW.md`.
 `hooks/memory-router.sh` gives the launcher and Phase 2 a cheap way to check memory freshness, recall relevant
 project facts, classify new learnings, write the required run-close learning review, and curate the index
-without rereading the whole repo or Vault every time.
+without rereading the whole repo or Vault every time. Persisted recall/history writes are measured in
+`MEMORY-USAGE.json`; `memory-router.sh metrics` reports compact recall/history economics, and `MEMORY.md`
+prioritizes frequently used, high-confidence, recent publish-safe learnings instead of forcing every row into
+the prompt.
 
 This layer is local-first and optional-provider-aware. It works without a Vault MCP; `provider status`
 auto-detects a running Obsidian Local REST API on `https://127.0.0.1:27124` / `http://127.0.0.1:27123`, and
@@ -467,6 +472,9 @@ Wenn eine Projektkarte existiert, prüft kimiflow sie pro Bereich mit `hooks/pro
 Bereiche können `current`, `stale`, `potentially_stale` oder `unknown` sein; stale betroffene Bereiche
 lösen einen empfohlenen, aber überspringbaren Delta-Refresh aus. Der Refresh aktualisiert nur Hashes und
 Commit-Metadaten der ausgewählten Bereiche, damit spätere Läufe die Map ohne Vollscan wiederverwenden.
+Sobald wahrscheinlich betroffene Pfade bekannt sind, empfiehlt `project-map-status.sh coverage --affected <pfad>...`
+die Phase-2-Tiefe: `compressed` für gemappte/aktuelle Bereiche, `targeted` für gemappte aber stale/unklare
+Bereiche und `full` für unmapped oder fehlende/ungültige Maps.
 
 Standalone-Map-Läufe können außerdem einen Fokus wählen: Codebase, Architektur, Doku oder opt-in
 Verbesserungsideen. Das Speicherziel ist explizit: nur `kimiflow`, `kimiflow + Vault` oder
@@ -489,7 +497,9 @@ Kimiflow hält zusätzlich ein bounded lokales Gedächtnis unter `.kimiflow/proj
 `LEARNING-REVIEW.md`. `hooks/memory-router.sh` gibt Launcher und Phase 2 einen günstigen Weg,
 Memory-Freshness zu prüfen, relevante Projektfakten abzurufen, neue Learnings zu klassifizieren, die
 verpflichtende Run-Abschluss-Review zu schreiben und den Index zu kuratieren, ohne jedes Mal das ganze Repo
-oder den ganzen Vault zu lesen.
+oder den ganzen Vault zu lesen. Persistierte Recall-/History-Snapshots werden in `MEMORY-USAGE.json`
+gemessen; `memory-router.sh metrics` zeigt kompakte Recall-/History-Economics, und `MEMORY.md` priorisiert
+häufig genutzte, vertrauenswürdige, aktuelle publish-safe Learnings statt jede Zeile in den Prompt zu laden.
 
 Diese Schicht ist local-first und funktioniert ohne Vault-MCP. `provider status` erkennt eine laufende
 Obsidian Local REST API auf `https://127.0.0.1:27124` / `http://127.0.0.1:27123`, und `provider connect`
@@ -502,7 +512,7 @@ werden sanitisiert. Run-Abschluss-Learnings sind qualitätsgeprüft und source-f
 vage Notizen und stale Evidence nicht als aktives Projektwissen landen. Evidence-Referenzen werden repo-relativ
 gespeichert; Pfade außerhalb des Repos werden zu `OUTSIDE_REPO` zusammengefasst. Wenn sich Evidence ändert,
 superseded der Refresh ältere Zeilen und Recall liefert nur aktuelle Learnings. Recall kann zusätzlich bounded
-alte Run-Artefakte durchsuchen und schreibt Use-Count/Last-Used-Metriken nur dann, wenn ein Recall-/History-
+alte Run-Artefakte durchsuchen und schreibt Use-Count/Last-Used-Metriken plus bounded Cost-Events nur dann, wenn ein Recall-/History-
 Snapshot gespeichert wird. Memory-Writes werden auf Prompt-Injection/Exfiltration gescannt, User-Präferenzen
 liegen in lokalen Profil-Dateien, und `propose`/`consolidate` machen aus Learnings reviewbare Regel-/Skill-
 Vorschläge und kompakte Historie. Proposal-State unterstützt `--approve`, `--reject` und `--apply`;

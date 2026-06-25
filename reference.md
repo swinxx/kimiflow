@@ -509,6 +509,8 @@ helpers):
   plus one `SECTION` line per section with `current|stale|potentially_stale|unknown`.
 - `project-map-status.sh status --affected <path>` → same output, with `affected=yes/no` so Phase 2 can
   ask only about stale sections that matter to the current feature/fix.
+- `project-map-status.sh coverage --affected <path>` → emits `PROJECT_MAP_COVERAGE` with mapped/unmapped
+  affected paths and `phase2_depth=compressed|targeted|full`.
 - `project-map-status.sh refresh --section <name>...` → after the mapper has refreshed the selected
   section artifacts, updates only those sections' `file_hashes`, `last_scanned_commit`, `status`, and
   `updated_at`.
@@ -527,6 +529,12 @@ Impact rules:
 section's `files`/`prefixes`, update the relevant markdown/`FACTS.jsonl` entries, then run
 `project-map-status.sh refresh --section <name>...`. On decline/headless/no answer/`unknown`, continue
 with normal Phase-2 code exploration and note the status in `STATE.md`.
+
+**Adaptive Phase-2 depth:** After likely affected paths are known, run
+`project-map-status.sh coverage --affected <path>...`. Use `compressed` when affected paths are mapped and
+current, `targeted` when the map covers them but the touched section is stale/unknown, and `full` when
+affected paths are unmapped or the map is missing/invalid. This keeps map-backed runs cheap without trusting
+outdated plans blindly.
 
 **Focus menu (Slice 3):** accepted standalone map runs may ask what lens the user wants. Use the user's
 language in the prompt and artifacts. Default/headless is `codebase+architecture`.
@@ -600,9 +608,11 @@ Translate those labels into the user's language in the actual artifact. Every sl
 without a later kimiflow feature/fix/audit run.
 
 **Phase 2 consumption:** before fresh code exploration, read `INDEX.json`, the status line from
-`project-map-status.sh`, then only the relevant `FACTS.jsonl` lines and markdown sections. If the map
-is absent, skipped, stale-but-declined, or unknown, continue with the existing Phase 2 memory/codebase
-research path unchanged.
+`project-map-status.sh`, and, once likely affected paths are known, the `PROJECT_MAP_COVERAGE` line. Then read
+only the relevant `FACTS.jsonl` lines and markdown sections. If coverage says `compressed`, lean on the map and
+verify only the touched code. If it says `targeted`, refresh/read only stale affected sections plus touched code.
+If it says `full`, or the map is absent/skipped/invalid/stale-but-declined/unknown, continue with the existing
+Phase 2 memory/codebase research path unchanged.
 
 ---
 
@@ -621,7 +631,7 @@ files work without any API key, subscription, or MCP server.
   LEARNINGS.jsonl    evidence-backed durable learnings
   USER.jsonl         evidence-backed user/workflow preferences
   MEMORY-INDEX.json  cheap lookup/curation index
-  MEMORY-USAGE.json  local use_count/last_used metrics for recalled items
+  MEMORY-USAGE.json  local use_count/last_used plus bounded recall/history cost events
   RECALL.sqlite      optional local FTS5 recall index
   RECALL.md          last/project recall log, or run-local recall when written there
   RUN-HISTORY.json   last on-demand run/session history snapshot
@@ -646,6 +656,7 @@ plugin-root rule as other helpers):
 memory-router.sh status [--root <path>] [--pretty]
 memory-router.sh recall --query <text>|--query-file <path> [--max <n>] [--write <path>]
 memory-router.sh history [--query <text>|--query-file <path>] [--max <n>] [--write]
+memory-router.sh metrics
 memory-router.sh classify --input <path>|--text <text>
 memory-router.sh record --summary <text> --topic <topic> --evidence <ref>...
 memory-router.sh review-run --run <path> [--write] [--skip <reason>]
@@ -715,9 +726,13 @@ preferences stay local-only and are never repo-doc candidates. Project facts sta
 run artifacts and writes `RUN-HISTORY.json` plus `RUN-HISTORY.md`. `recall` also reports `sources.history` hits,
 so Phase 2 can reuse old plans/reviews without loading whole run folders.
 
-**Usage and lifecycle metrics:** persisted recall/history writes update `MEMORY-USAGE.json` with `use_count` and
-`last_used_at`. `curate --write` folds those metrics into `MEMORY-INDEX.json` and reports lifecycle data such as
-stale learning candidates, unused current rows, and the configured `KIMIFLOW_LEARNING_STALE_AFTER_DAYS` window.
+**Usage and lifecycle metrics:** persisted recall/history writes update `MEMORY-USAGE.json` with `use_count`,
+`last_used_at`, and a bounded event log for recall/history writes: hit count, approximate output-token cost, and
+the recalled keys. `memory-router.sh metrics` returns the compact economics summary. `curate --write` folds those
+metrics into `MEMORY-INDEX.json` and reports lifecycle data such as stale learning candidates, cold/unused current
+rows, and the configured `KIMIFLOW_LEARNING_STALE_AFTER_DAYS` window. `MEMORY.md` stays always-on but use-aware:
+it prefers frequently recalled, high-confidence, recent publish-safe learnings; cold rows stay searchable in
+`LEARNINGS.jsonl`/`RECALL.sqlite` instead of being forced into every prompt.
 
 **Local FTS5 recall:** `memory-router.sh index --write` builds `.kimiflow/project/RECALL.sqlite` when `sqlite3`
 is available. It indexes bounded memory, user profile, current learnings, facts, and old run artifacts.

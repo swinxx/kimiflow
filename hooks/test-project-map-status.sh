@@ -85,11 +85,18 @@ run_refresh() {
   ( cd "$REPO" && "$SCRIPT" refresh "$@" )
 }
 
+run_coverage() {
+  ( cd "$REPO" && "$SCRIPT" coverage "$@" )
+}
+
 # missing index
 reset_repo
 rm -f "$INDEX"
 out="$(run_status)"
 assert_has "$out" $'PROJECT_MAP\tmissing' "missing_index_reports_missing"
+out="$(run_coverage --affected hooks/a.sh)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tmissing' "missing_index_coverage_reports_missing"
+assert_has "$out" 'phase2_depth=full' "missing_index_coverage_uses_full_depth"
 
 # current section from matching hashes
 reset_repo
@@ -97,6 +104,14 @@ BASE="$(cd "$REPO" && git rev-parse --short HEAD)"
 write_index "$BASE" "$(hash_file "$REPO/hooks/a.sh")" "$(hash_file "$REPO/docs/guide.md")"
 out="$(run_status)"
 assert_has "$out" $'SECTION\thooks\tcurrent' "matching_hash_reports_current"
+out="$(run_coverage --affected hooks/a.sh)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tcovered' "coverage_reports_current_affected_path_covered"
+assert_has "$out" 'phase2_depth=compressed' "coverage_current_path_uses_compressed_phase2"
+tmp_index="$(mktemp)"
+jq '.sections.empty = {status: "current"}' "$INDEX" > "$tmp_index" && mv "$tmp_index" "$INDEX"
+out="$(run_coverage --affected hooks/a.sh)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tcovered' "coverage_ignores_unrelated_unknown_section"
+assert_has "$out" 'phase2_depth=compressed' "coverage_unrelated_unknown_keeps_compressed_phase2"
 
 # exact hash mismatch marks that section stale
 printf 'two\n' > "$REPO/hooks/a.sh"
@@ -104,6 +119,9 @@ out="$(run_status --affected hooks/a.sh)"
 assert_has "$out" $'PROJECT_MAP\tpartially_stale' "hash_mismatch_makes_map_partially_stale"
 assert_has "$out" $'SECTION\thooks\tstale\taffected=yes\treason=hash-mismatch' "hash_mismatch_section_stale"
 assert_has "$out" 'affected_stale=1' "affected_stale_counted"
+out="$(run_coverage --affected hooks/a.sh)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tstale' "coverage_marks_stale_affected_path"
+assert_has "$out" 'phase2_depth=targeted' "coverage_stale_path_uses_targeted_phase2"
 
 # new file under a known prefix is only potentially stale
 reset_repo
@@ -112,6 +130,9 @@ write_index "$BASE" "$(hash_file "$REPO/hooks/a.sh")" "$(hash_file "$REPO/docs/g
 printf 'new\n' > "$REPO/hooks/new.sh"
 out="$(run_status)"
 assert_has "$out" $'SECTION\thooks\tpotentially_stale' "new_file_under_prefix_potentially_stale"
+out="$(run_coverage --affected outside/new.txt)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tpartial' "coverage_marks_unmapped_affected_path"
+assert_has "$out" 'phase2_depth=full' "coverage_unmapped_path_uses_full_phase2"
 
 # manifest/build config change fans out to stack-ish sections
 reset_repo
@@ -146,6 +167,16 @@ jq -n --arg base "$BASE" '{
 }' > "$INDEX"
 out="$(run_status)"
 assert_has "$out" $'SECTION\tempty\tunknown' "empty_section_unknown"
+
+reset_repo
+BASE="$(cd "$REPO" && git rev-parse --short HEAD)"
+write_index "$BASE" "$(hash_file "$REPO/hooks/a.sh")" "$(hash_file "$REPO/docs/guide.md")"
+tmp_index="$(mktemp)"
+jq '.sections.mystery = {prefixes: ["mystery/"], last_scanned_commit: "NOT VERIFIED", status: "current"}' "$INDEX" > "$tmp_index" && mv "$tmp_index" "$INDEX"
+out="$(run_coverage --affected mystery/new.txt)"
+assert_has "$out" $'PROJECT_MAP_COVERAGE\tunknown' "coverage_marks_affected_unknown_section"
+assert_has "$out" 'affected_unknown=1' "coverage_counts_affected_unknown_section"
+assert_has "$out" 'phase2_depth=targeted' "coverage_affected_unknown_uses_targeted_phase2"
 
 echo "----"
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

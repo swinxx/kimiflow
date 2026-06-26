@@ -9,7 +9,7 @@
 
 # kimiflow — Feature & Fix Loop (Claude Code + Codex skill/plugin)
 
-A **user-invoked** `/kimiflow` (Claude Code) / `$kimiflow` (Codex) skill+plugin that runs a disciplined **8-phase loop** for building features and fixing bugs — clarify → understand/diagnose → plan → plan-gate → implement → verify → code-review ensemble → commit. Its gates are **mechanical, not advisory**: reviewers write structured findings to files, a tested **fail-closed** script counts the open blockers, and a "done" self-report can't talk its way past them.
+A **user-invoked** `/kimiflow` (Claude Code) / `$kimiflow` (Codex) skill+plugin that runs a disciplined **8-phase loop** for building features and fixing bugs — clarify → understand/diagnose → plan → plan-gate → implement → verify → code-review ensemble → commit. Its gates are **mechanical, not advisory**: reviewers write structured findings to files, tested **fail-closed** scripts count the open blockers, fix runs keep red/green evidence, and a "done" self-report can't talk its way past them.
 
 > `SKILL.md` / `reference.md` are written in English. **kimiflow replies in the language you write in** — write in German and it grills/answers in German.
 
@@ -117,8 +117,11 @@ Each ✋/✅ and the diagnose/commit stop is a real gate, not a prompt suggestio
 
 | Gate | Phase | Mechanism | Fail-closed? |
 |------|-------|-----------|--------------|
+| **Working-tree start gate** | 0 | `hooks/working-tree-gate.sh` requires a clean repo before new write-mode Kimiflow runs; `.kimiflow/` local state is ignored | ✅ yes |
 | **Plan-blocker gate** | 4 | `hooks/plan-blocker-gate.sh` blocks unresolved markers, unmapped acceptance criteria, missing verification, missing path evidence, and undeclared affected files before reviewers run | ✅ yes |
 | **Plan-gate** | 4 | `hooks/resolve-review-gate.sh` counts open `BLOCKER/HIGH` over reviewer findings; cap 3; blocker-aware anti-oscillation | ✅ yes |
+| **Red/green fix gate** | 6 | `hooks/red-green-gate.sh` requires `BUG-REPRO.md` with red command/status/output, green command/status/output, and regression evidence before fix-mode review/learning can finish | ✅ yes |
+| **Local diagnostics advisory** | 6/7 | `hooks/lsp-diagnostics.sh` runs bounded existing local typecheck/lint/LSP-adjacent tools or one untracked local `.kimiflow/lsp-diagnostics` command; flags are triaged before commit | advisory |
 | **Code-review gate** | 7 | focused review lenses produce candidates; the orchestrator verifies and promotes confirmed findings; the same resolver counts open `BLOCKER/HIGH` | ✅ yes |
 | **Commit-gate** | 7 | STOP + advisory triage; waits for your explicit OK before any commit | ✅ yes |
 | **Secret-commit hook** | any commit | `PreToolUse` hook — blocks staging secret-looking **paths** + bulk `git add -A`/`.` | ✅ yes |

@@ -41,6 +41,15 @@ jobs:
       - name: Unit tests (launcher-status) — hard gate
         run: bash hooks/test-launcher-status.sh
 
+      - name: Unit tests (working-tree-gate) — hard gate
+        run: bash hooks/test-working-tree-gate.sh
+
+      - name: Unit tests (red-green-gate) — hard gate
+        run: bash hooks/test-red-green-gate.sh
+
+      - name: Unit tests (local diagnostics) — hard gate
+        run: bash hooks/test-lsp-diagnostics.sh
+
       - name: Unit tests (review-gate) — hard gate
         run: bash hooks/test-resolve-review-gate.sh
 

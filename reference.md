@@ -75,6 +75,8 @@ hygiene pass, not an implementation mode:
   destructively without a later explicit action. Ignore `memory.curation.silent_reasons` in normal UI; for example
   `many_learnings` is an internal health/threshold hint, not user-facing work when memory is under budget and fresh.
 
+**Working-tree start gate:** before any normal write-mode Kimiflow run starts (feature, fix, audit, project-map/update, docs write), run `hooks/working-tree-gate.sh`. The stable output is `WORKING_TREE_GATE<TAB>OPEN|CLOSED<TAB>dirty=<n><TAB>staged=<n><TAB>unstaged=<n><TAB>untracked=<n><TAB>reason=<code><TAB>detail=<paths>`. `OPEN` is required before slugging, active-session start, or file edits. `CLOSED` means: stop, show the dirty-path summary, and ask the user to commit, stash, or otherwise clean the worktree first. Do not continue by accepting the risk; the point is to avoid mixing an old diff with a new Kimiflow run. Read-only launcher/status/inspection may still run and report the dirty state. `.kimiflow/` local state is ignored by the gate.
+
 **Drilldowns, not dumps:**
 - Findings: if `findings.open > 0`, offer `summarize`, `fix highest priority`, `group by area`, `show details`,
   `back`. Read `.kimiflow/project/FINDINGS.md`; show a compact list only. A selected fix routes into a normal
@@ -447,6 +449,33 @@ For bug fixes this branch replaces the intent/research logic. **Core rule: prove
 ```
 
 **Diagnosis gate:** root cause **not** proven → **do NOT fix.** The fix's acceptance criterion = **"the reproduction no longer fails" + no regression.**
+
+**BUG-REPRO.md (Phase 2 + Phase 6 evidence):**
+```
+## Red
+Red command: <smallest command/manual step that reproduces the bug>
+Red status: failed
+Red output: <decisive line only>
+
+## Green
+Green command: <same focused command after the fix>
+Green status: passed
+Green output: <decisive line only>
+
+## Regression
+Regression command: <affected suite>
+Regression status: passed
+```
+
+`BUG-REPRO.md` is the durable handoff that prevents a fix run from teaching Kimiflow an unproven success. Write the Red block before changing production code; complete the Green and Regression blocks only after the fix. If no regression command is applicable, write `Regression status: not applicable` with a short reason.
+
+**Red-Green Gate:** after Phase 6 in fix mode, run:
+
+```bash
+hooks/red-green-gate.sh .kimiflow/<slug> --mode fix
+```
+
+The stable output is `RED_GREEN_GATE<TAB>OPEN|CLOSED<TAB>blockers=<n><TAB>reason=<code><TAB>detail=<codes>`. `CLOSED` blocks Phase 7, memory promotion, and `Status: done`. This gate verifies the evidence contract; it does not execute the commands.
 
 ---
 
@@ -1135,6 +1164,8 @@ AC-1 — When an empty search string is sent, the API shall return HTTP 400.
 Run each criterion's method and show the command + the decisive output line(s) (not full logs). Then verify **goal-backward** — "task completion ≠ goal achievement":
 
 - For each criterion's artifact, check three levels: **Exists** (the code is there) · **Substantive** (real logic, not a stub/placeholder) · **Wired** (imported AND actually used on a real path). Mark ✓VERIFIED / ⚠ORPHANED / ✗STUB / ✗MISSING. A criterion is met only at **Wired**.
+- **Fix mode:** update `BUG-REPRO.md`, then run `red-green-gate.sh`; a `CLOSED` verdict means the fix is not verified enough to review, finish, or learn from.
+- **Local LSP diagnostics advisory:** run `hooks/lsp-diagnostics.sh` after code changes when available. It chooses one untracked local `.kimiflow/lsp-diagnostics` command first; otherwise it runs a bounded set of existing project scripts (`typecheck`, `lint`) and common local diagnostics (`tsc`, `pyright`, `ruff`, `mypy`). Each failed command emits a compact `FLAG` classified as `changed-files`, `project-wide`, or `unknown-scope`. It never installs tools, rejects free-form CLI commands, ignores tracked config for safety, and skips cleanly when nothing suitable is on PATH.
 - **Regression:** existing/affected test suite green.
 - **Cold-start smoke test:** if the diff touches `server.*` / `app.*` / `migrations/*` / `seed*` / `docker-compose*`, boot the thing from scratch once — many "green tests, broken app" failures only show on a cold boot.
 - Non-automatable criteria → a verifier subagent that derives pass/fail from evidence and **does not trust** the implementer's self-report.
@@ -1183,3 +1214,5 @@ Before the commit, after explicit user OK:
 **Mechanized (kimiflow repos only):** points 2–3 are also enforced by the `commit-secret-gate` PreToolUse hook — it **blocks** `git add -A`/`.` and any `git commit` whose staged paths — or, for `git commit -a`/`--all`, the tracked working-tree paths it would auto-stage — match secret patterns (`.env`/`.envrc` incl. `*.env` suffixes like `prod.env`, `*.pem/.key/.p12/.pfx/.asc`, private SSH keys `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519` (not `.pub`), `.npmrc`/`.pypirc`, `secret(s)`/`credential(s)`/`api_key`/`access_token`/`auth_token` in a path; a combined `git add <secret> && git commit` is also caught). In Claude Code it ships through the plugin hooks; in Codex it is installed through `hooks/install-codex-hooks.sh`, which writes stable wrappers into `${CODEX_HOME:-~/.codex}/hooks` and pins `KIMIFLOW_PLUGIN_ROOT` back to the plugin checkout. **Skill-only use loads no hook.** The hook is **auto-active only where a `.kimiflow/` directory exists at the git root** (kimiflow creates one in Phase 0), so it never polices unrelated repos — and commits in repos without `.kimiflow/` are knowingly unprotected. The pattern list is a **minimum deny-list**, not exhaustive; false positives on filenames merely containing those words are possible (resolve by committing the safe file by name from outside a kimiflow run).
 
 **Scope — filename/path hygiene, NOT secret-in-source detection.** The gate matches secret-looking **paths**, never file **contents**: a secret pasted into source (e.g. `const API_KEY = "sk-…"` in `app.js`) passes through untouched. For in-source secrets, pair it with a dedicated **content scanner** — `gitleaks` (regex + Shannon entropy) or `trufflehog` (per-credential detectors + live verification); the two are complementary, not a substitute for this path-level gate. kimiflow ships an **optional advisory wrapper** `hooks/secret-content-scan.sh` (run in Phase 7) that invokes `gitleaks` — else `trufflehog` — over the **staged content** when one is installed and routes any finding to `ADVISORIES.md` for commit-gate triage; it is **non-gating** and skips gracefully (a STDERR note) when no scanner is present, so it never grants a false sense of coverage. Four further boundaries: (1) the precise (jq) path only governs `git` at a **command position** (line start, or after `;`/`&`/`|`) — `sudo git …`, `env X=y git …`, a path-prefixed `/usr/bin/git …`, and a `command`/`builtin`/`exec git …` wrapper are out of scope by design (a deliberate non-standard invocation is not the gate's threat model — it is accident-hygiene). A global **`git -C <path>` IS honored**, though: the gate resolves the target repo via git's own cumulative `-C` (so `git -C <repo> commit` run from another cwd is scoped to `<repo>`, not the tool cwd), for **unquoted, space-free** `-C` paths — a quoted `-C` path containing a space (`git -C "my repo"`) stays a residual; (2) the **jq-less fallback is intentionally blunt** — unable to extract the command, it greps the raw payload and may **over-block** a benign command that merely mentions git (e.g. `echo "git commit later"`). Over-blocking is the safe failure for a fail-closed gate; install `jq` for the precise path rather than expecting a regex to parse the shell; (3) an explicit **pathspec commit** (`git commit <path>`, e.g. `git commit .env -m …`) of an **already-tracked** secret-looking file is **not** covered — it stages the named path at commit time, and reliably parsing a pathspec out of a shell string needs an AST, not a regex; (4) an **escaped quote** inside the `-m` message (`git commit -m "a\"; b" -a`) can desync the naive quote-strip and re-hide a `;`/`&`/`|` separator before the `-a` — also out of scope (same root: regex ≠ shell parser). (The `git commit -a`/`--all` form — including bundled short flags where `a` is not first (`-am`/`-vam`/`-qam`), and a metachar **hidden in a quoted message** (`-m "a; b" -a`) or behind a **backslash-newline continuation** — **is** covered: the command is line-joined and unquoted *before* the `;`/`&`/`|` split, then the tracked working-tree is scanned. That flag detection is best-effort over the unparsed string: it matches `a` before any value-taking short option, so `-ma` (a message) and `--allow-empty` are correctly ignored, while an unquoted `-a` token inside a commit message would over-block — the safe failure.) **Bottom line: treat the gate as a hygiene backstop, not complete secret protection** — real coverage is `.gitignore` discipline + a content scanner (gitleaks/trufflehog) + not tracking secrets in the first place.
+
+**Local diagnostics / LSP advisory.** `hooks/lsp-diagnostics.sh` is the local-first code diagnostics companion. It is advisory-only like the secret content scanner: existing local tools can produce `FLAG`s, no tool means `SKIPPED`, and nothing is installed. Selection order: one untracked `.kimiflow/lsp-diagnostics` command, else a bounded set of package `typecheck`, package `lint`, `tsc --noEmit`, `pyright`, `ruff check .`, `mypy .` (default max 3 commands via `KIMIFLOW_LSP_MAX_COMMANDS`). Free-form CLI commands are not accepted; custom diagnostics must live in the untracked local config file. A tracked `.kimiflow/lsp-diagnostics` is ignored for safety because it would otherwise execute a command from a cloned repo. Failed diagnostics are classified as `changed-files` when output references touched paths, `project-wide` when touched files exist but are not referenced, and `unknown-scope` when no changed-file basis exists. Treat its output as a cheap extra signal before review/commit, not a substitute for acceptance tests or manual app verification.

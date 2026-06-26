@@ -11,12 +11,20 @@
     {
       "name": "kimiflow",
       "description": "Feature & bug-fix loop for Claude Code with real gates, project intelligence maps, token-cheap memory recall, Obsidian Terminal MCP setup, health/auth status, and Vault sync handoffs. Replies in your language.",
-      "version": "0.1.38",
+      "version": "0.1.39",
       "author": {
         "name": "kimikon"
       },
       "source": ".",
-      "tags": ["workflow", "quality-gates", "tdd", "code-review", "bug-fix", "project-intelligence", "memory"]
+      "tags": [
+        "workflow",
+        "quality-gates",
+        "tdd",
+        "code-review",
+        "bug-fix",
+        "project-intelligence",
+        "memory"
+      ]
     }
   ]
 }

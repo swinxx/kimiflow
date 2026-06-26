@@ -4,6 +4,11 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 ## Unreleased
 
+_No unreleased changes._
+
+## 0.1.43
+
+
 ### Added
 - Added local Background Handles for long-running read-only or draft-producing Kimiflow work such as deep codebase
   analysis, docs drafts, security/advisory review, and improvement scans.

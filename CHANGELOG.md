@@ -6,6 +6,21 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 _No unreleased changes._
 
+## 0.1.50
+
+ShellCheck cleanup across the hooks: a real `local` path-derivation bug plus dead `case` patterns, unused variables, and two error-level parsing ambiguities.
+
+### Fixed
+- **ShellCheck hygiene across `hooks/`**: split compound `local` declarations so derived path variables
+  (`state`/`file`/`project`/`salt_file`) read the just-bound `$1`/`$2` instead of a masked outer value
+  (9× SC2318 latent bug in `active-run.sh`, `agentic-readiness.sh`, `memory-router.sh`); dropped dead
+  `case` alternatives `*routes*` / `migrations/*` in `project-map-status.sh` (strict subsets of `*route*`
+  / `*migration*`, behaviour identical — SC2221/SC2222); removed the unused `pretty` variable in
+  `clarify-gate.sh` / `plan-blocker-gate.sh` (the `--pretty` flag stays an accepted no-op) and the unused
+  `handoff` in `background-run.sh` (SC2034); and disambiguated `$((` → `$( (` in
+  `test-commit-secret-gate.sh` / `test-lsp-diagnostics.sh` (SC1102, error-level). Repo-wide error-level
+  ShellCheck items: 2 → 0; all hook test suites stay green.
+
 ## 0.1.49
 
 Close the local workqueue loop: built `IMPROVEMENTS.md`/`FINDINGS.md` slices get marked done so the launcher stops counting them as open.

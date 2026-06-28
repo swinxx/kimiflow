@@ -56,6 +56,9 @@ jobs:
       - name: Unit tests (review-gate) — hard gate
         run: bash hooks/test-resolve-review-gate.sh
 
+      - name: Unit tests (release-consistency-check) — hard gate
+        run: bash hooks/test-release-consistency-check.sh
+
       - name: Validate JSON — hard gate
         run: |
           jq -e . hooks/hooks.json > /dev/null

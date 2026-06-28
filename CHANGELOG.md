@@ -6,6 +6,21 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 _No unreleased changes._
 
+## 0.1.49
+
+Close the local workqueue loop: built `IMPROVEMENTS.md`/`FINDINGS.md` slices get marked done so the launcher stops counting them as open.
+
+### Added
+- **Workqueue close-back** (`hooks/improvements-status.sh` + tests): a `list` / `mark-done <id>` / `reopen <id>` helper
+  that marks a built slice from `.kimiflow/project/IMPROVEMENTS.md` (`## Priorisierte Slices`) or `FINDINGS.md`
+  (`## Offen`) done via an idempotent in-place `<!-- kimiflow:queue-done -->` marker (stable slug/token ids, atomic
+  write). The `hooks/launcher-status.sh` counter gains an optional done-marker argument — with a `length>0`
+  backward-compat guard — and no longer counts marked slices as open. A non-blocking Stop-hook nudge
+  (`hooks/improvements-staleness-nudge.sh`, registered in both `hooks.json` and `hooks/hooks.json`) reminds at most once
+  per day, and only when a run just completed while open slices remain. Documented as Phase-7 step 8a
+  "Workqueue close-back" in `SKILL.md`, `skills/kimiflow/SKILL.md`, and `reference.md`, with Claude + Codex smoke
+  assertions and CI unit tests.
+
 ## 0.1.48
 
 Release-hygiene check, consistent capability display, and project-map outputs framed as a local workqueue.

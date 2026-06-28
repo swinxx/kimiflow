@@ -59,6 +59,12 @@ jobs:
       - name: Unit tests (release-consistency-check) — hard gate
         run: bash hooks/test-release-consistency-check.sh
 
+      - name: Unit tests (workqueue closeback helper) — hard gate
+        run: bash hooks/test-improvements-status.sh
+
+      - name: Unit tests (workqueue closeback nudge) — hard gate
+        run: bash hooks/test-improvements-staleness-nudge.sh
+
       - name: Validate JSON — hard gate
         run: |
           jq -e . hooks/hooks.json > /dev/null

@@ -38,13 +38,18 @@ state_value() {
 }
 
 count_section_items() {
-  local file="$1" heading_re="$2"
+  local file="$1" heading_re="$2" done_marker="${3:-}"
   [ -f "$file" ] || { printf '0'; return 0; }
-  awk -v heading_re="$heading_re" '
+  # When done_marker is a non-empty substring, a "### " block carrying that marker (the queue-done marker
+  # written by improvements-status.sh) is NOT counted. Without a 3rd arg the count is unchanged
+  # (length(done_marker) > 0 guard — an empty marker must never match every line and zero the count).
+  awk -v heading_re="$heading_re" -v done_marker="$done_marker" '
+    function flush() { if (have && !blockdone) count++; have = 0; blockdone = 0 }
     $0 ~ heading_re { in_section = 1; next }
-    in_section && /^## / { in_section = 0 }
-    in_section && /^### / { count++ }
-    END { print count + 0 }
+    in_section && /^## / { flush(); in_section = 0; next }
+    in_section && /^### / { flush(); have = 1; blockdone = 0; next }
+    in_section && have && length(done_marker) > 0 && index($0, done_marker) > 0 { blockdone = 1 }
+    END { if (in_section) flush(); print count + 0 }
   ' "$file"
 }
 
@@ -355,8 +360,9 @@ fi
 
 FINDINGS_PATH=".kimiflow/project/FINDINGS.md"
 IMPROVEMENTS_PATH=".kimiflow/project/IMPROVEMENTS.md"
-FINDINGS_OPEN="$(count_section_items "$ROOT/$FINDINGS_PATH" '^##[[:space:]]+(Offen|Open)([[:space:]].*)?$')"
-IMPROVEMENTS_OPEN="$(count_section_items "$ROOT/$IMPROVEMENTS_PATH" '^##[[:space:]]+(Priorisierte Slices|Prioritized Slices)([[:space:]].*)?$')"
+QUEUE_DONE_MARKER='kimiflow:queue-done'
+FINDINGS_OPEN="$(count_section_items "$ROOT/$FINDINGS_PATH" '^##[[:space:]]+(Offen|Open)([[:space:]].*)?$' "$QUEUE_DONE_MARKER")"
+IMPROVEMENTS_OPEN="$(count_section_items "$ROOT/$IMPROVEMENTS_PATH" '^##[[:space:]]+(Priorisierte Slices|Prioritized Slices)([[:space:]].*)?$' "$QUEUE_DONE_MARKER")"
 FEATURE_CHECK_FINDINGS_OPEN="$(count_feature_check_findings "$ROOT")"
 FEATURE_CHECK_RUNS="$(count_feature_check_runs "$ROOT")"
 

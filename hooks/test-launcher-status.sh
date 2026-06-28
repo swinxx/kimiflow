@@ -152,6 +152,58 @@ EOF
 out="$(run_status)"
 assert_jq "$out" '.findings.open == 2 and .improvements.open == 1' "findings_and_improvements_counted_en"
 
+# AC-2: a "### " block carrying the queue-done marker is NOT counted as open.
+# AC-3: the unmarked siblings stay counted (the count change is solely the marker, not section logic).
+cat > "$REPO/.kimiflow/project/FINDINGS.md" <<'EOF'
+# Findings
+
+## Offen
+
+### KF-F-001 - done one
+<!-- kimiflow:queue-done id=kf-f-001 commit=abc date=2026-06-28 -->
+- x
+### KF-F-002 - still open
+- y
+
+## Erledigt
+EOF
+cat > "$REPO/.kimiflow/project/IMPROVEMENTS.md" <<'EOF'
+# Improvements
+
+## Priorisierte Slices
+
+### 1. Marked
+<!-- kimiflow:queue-done id=marked commit=abc date=2026-06-28 -->
+- x
+### 2. Open
+- y
+### 3. Also open
+- z
+EOF
+out="$(run_status)"
+assert_jq "$out" '.findings.open == 1 and .improvements.open == 2' "marked_not_counted"
+# AC-3 explicit: without any marker present the open count is the full set (backward-compat).
+cat > "$REPO/.kimiflow/project/IMPROVEMENTS.md" <<'EOF'
+# Improvements
+
+## Priorisierte Slices
+
+### 1. Open
+### 2. Open
+### 3. Open
+EOF
+out="$(run_status)"
+assert_jq "$out" '.improvements.open == 3' "no_marker_arg_unchanged"
+
+# AC-3 direct: the length(done_marker)>0 guard is load-bearing. Call count_section_items with an EMPTY 3rd arg
+# directly — an empty marker must NOT match every line and zero the count. (This platform's awk: index(s,"")==1.)
+guard_fixture="$WORK/guard.md"
+printf '## Offen\n### A\n- x\n### B\n- y\n## End\n' > "$guard_fixture"
+csi_src="$(sed -n '/^count_section_items() {/,/^}/p' "$SCRIPT")"
+n_empty="$(bash -c "$csi_src"$'\n'"count_section_items \"$guard_fixture\" '^##[[:space:]]+(Offen|Open)([[:space:]].*)?\$' ''")"
+n_none="$(bash -c "$csi_src"$'\n'"count_section_items \"$guard_fixture\" '^##[[:space:]]+(Offen|Open)([[:space:]].*)?\$'")"
+if [ "$n_empty" = "2" ] && [ "$n_none" = "2" ]; then pass "guard_empty_marker_counts_all"; else fail "guard_empty_marker_counts_all (empty=$n_empty none=$n_none)"; fi
+
 mkdir -p "$REPO/.kimiflow/feature-check-demo/findings"
 cat > "$REPO/.kimiflow/feature-check-demo/FEATURE-CHECK.md" <<'EOF'
 # Feature Check

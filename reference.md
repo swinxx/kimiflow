@@ -982,6 +982,39 @@ Phase 2 memory/codebase research path unchanged.
 
 ---
 
+## Workqueue close-back (Phase 7 step 8a)
+
+The deep-map workqueues — `.kimiflow/project/IMPROVEMENTS.md` (`## Priorisierte Slices` / `## Prioritized Slices`)
+and `.kimiflow/project/FINDINGS.md` (`## Offen` / `## Open`) — are launcher-surfaced as `improvements.open` /
+`findings.open`. Those counts are structural (`### ` blocks in the open section). Nothing used to write back, so a
+slice that was actually built kept showing as open and the count drifted upward. `hooks/improvements-status.sh`
+closes that loop mechanically.
+
+**Helper.** `improvements-status.sh <list|mark-done <id>|reopen <id>> [--queue improvements|findings] [--commit <sha>]
+[--root <path>] [--write] [--json|--pretty]` (Codex: `KIMIFLOW_HOST=codex` + `KIMIFLOW_PLUGIN_ROOT`).
+- **Slice id** = the leading explicit token if the `### ` heading starts with one (e.g. `### KF-F-001 - …` → `kf-f-001`,
+  stable across title edits), else a slug of the title (leading ordinal/bullet stripped). `mark-done`/`reopen` accept an
+  exact id or a unique prefix; an ambiguous prefix fails (exit ≠ 0, no write) and lists the candidates.
+- **Canonical done-state** = an in-place marker line directly under the heading:
+  `<!-- kimiflow:queue-done id=<id> commit=<sha> date=<YYYY-MM-DD> -->`. `mark-done` is idempotent (updates commit/date,
+  never duplicates); `reopen` removes the marker. Writes are atomic (`mktemp` + `mv -f`); `list` is read-only and needs
+  no `--write` (dry-run without it). The slice keeps any human `- Erledigt:` line, so no information is lost.
+- **Counter.** `launcher-status.sh`'s `count_section_items` takes an optional 3rd `done_marker` substring and skips a
+  `### ` block carrying it; with no 3rd arg (or an empty one) the count is unchanged — the `length(done_marker) > 0`
+  guard prevents an empty marker from matching every line and zeroing the count.
+
+**Attribution is EXPLICIT.** The Phase-7 orchestrator calls `mark-done` only for a slice the run actually closed; there
+is no heuristic auto-detection (a false positive would mark an unbuilt slice done — worse than the status quo).
+
+**Stop-hook backstop.** `hooks/improvements-staleness-nudge.sh` (wired into both `hooks.json`, rich form, and
+`hooks/hooks.json`, minimal form) is non-blocking, honors `stop_hook_active`, exits 0 on every path, and is silent
+without jq/git/a queue file. It fires a USER-visible `systemMessage` (rate-limited once per UTC day) ONLY when the count
+of `Status: done` runs has increased since its stamp (`.kimiflow/.improvements-nudge-stamp`) AND ≥1 open slice remains —
+i.e. right after a run completes, not on every commit. A missing stamp seeds the baseline WITHOUT firing (the repo may
+already have many done runs).
+
+---
+
 ## Memory Router & Learning Loop (Phase 2 recall · Phase 7 learn)
 
 The memory router is Kimiflow's bounded project brain. It makes memory useful without paying to reread the

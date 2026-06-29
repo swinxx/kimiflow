@@ -11,7 +11,8 @@ import ssl
 import urllib.error
 import urllib.request
 
-from . import contracts, rows, store
+from . import clock, contracts, rows, store
+from .cli import die, resolve_root, usage
 
 _PROVIDER_PATH = ".kimiflow/project/VAULT-PROVIDER.json"
 _DEFAULT_DETECT_TIMEOUT = 0.35
@@ -593,3 +594,416 @@ def vault_status_json(index, provider_manifest=""):
         "last_write_at": last_write,
         "provider": provider,
     }
+
+
+# --- provider subcommand (cmd_provider 4160-4383) -------------------------------
+
+def _nav(obj, *keys):
+    cur = obj
+    for key in keys:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
+
+
+def _bool(value):
+    # jq -r rendering of a boolean (true/false).
+    return "true" if value else "false"
+
+
+def _base_url_from_provider(provider):
+    # Bash provider_base_url_from_provider_json (871-876).
+    path = _jq_or(provider.get("vault_path"), "")
+    url = path if path != "" else _jq_or(_nav(provider, "detection", "url"), "")
+    if not url:
+        url = "https://127.0.0.1:27124"
+    return url
+
+
+def provider_setup_plan_json(provider, setup_host):
+    # Bash provider_setup_plan_json (890-993).
+    if setup_host not in ("codex", "claude", "all"):
+        setup_host = "all"
+    raw_url = _base_url_from_provider(provider)
+    base = _normalize_loopback_origin(raw_url)
+    if base is not None:
+        base_url = base
+        mcp_url = base_url + "/mcp/"
+        status = "setup_plan"
+        reason = ""
+    else:
+        base_url = raw_url
+        mcp_url = ""
+        status = "blocked_non_loopback"
+        reason = "non_loopback_url"
+    blocked = status == "blocked_non_loopback"
+    helper_path = "~/.kimiflow/obsidian-mcp-headers.sh"
+    # Bash builds this via `$(printf '...prompt"\n')`; command substitution strips the
+    # trailing newline, so the snippet ends at `prompt"` (no final \n).
+    codex_snippet = ('[mcp_servers.obsidian]\nurl = "%s"\n'
+                     'bearer_token_env_var = "OBSIDIAN_API_KEY"\n'
+                     'default_tools_approval_mode = "prompt"') % mcp_url
+    claude_snippet = {"mcpServers": {"obsidian": {"type": "http", "url": mcp_url,
+                                                  "headersHelper": helper_path}}}
+    manual_steps = [
+        "Install and enable Obsidian Local REST API, then keep Obsidian running.",
+        "Copy the API key only into your shell environment or macOS Keychain; do not paste it into chat or commit it.",
+        "Run hooks/vault-mcp-open-terminal.sh --host <codex|claude|all> to open the interactive terminal wizard.",
+        "Paste the API key only into that terminal prompt; do not paste it into chat or commit it.",
+        "If the wizard reports a self-signed HTTPS certificate, trust the Obsidian Local REST API certificate in macOS Keychain, then rerun the wizard.",
+        "Restart or reload the MCP client so the host, not Kimiflow, owns the bearer token.",
+    ]
+    return {
+        "schema_version": 1,
+        "status": status,
+        "reason": (None if reason == "" else reason),
+        "host": setup_host,
+        "blocked": blocked,
+        "provider_state": {
+            "configured": provider.get("configured") is True,
+            "available": provider.get("available") is True,
+            "health": _jq_or(_nav(provider, "health", "status"), "unknown"),
+            "auth": _jq_or(_nav(provider, "auth", "status"), "unknown"),
+            "detected_url": _jq_or(_nav(provider, "detection", "url"), ""),
+            "manifest_url": _jq_or(provider.get("vault_path"), ""),
+        },
+        "mcp": {
+            "transport": "streamable_http",
+            "url": ("" if blocked else mcp_url),
+            "base_url": base_url,
+            "token_env_var": "OBSIDIAN_API_KEY",
+            "auth_header": "Authorization: Bearer ${OBSIDIAN_API_KEY}",
+            "certificate_url": (base_url + "/obsidian-local-rest-api.crt"
+                                if (not blocked and base_url.startswith("https://")) else ""),
+            "http_loopback_fallback": "http://127.0.0.1:27123/mcp/",
+        },
+        "secret_policy": {
+            "stores_token": False,
+            "writes_token_to_repo": False,
+            "echoes_token": False,
+            "token_owner": "host_mcp_client",
+            "token_inputs": ["OBSIDIAN_API_KEY", "KIMIFLOW_OBSIDIAN_API_KEY",
+                             "macOS Keychain service kimiflow.obsidian.api-key"],
+            "non_loopback_blocked": blocked,
+        },
+        "helpers": {
+            "setup_script": "hooks/vault-mcp-setup.sh",
+            "terminal_setup": ("" if blocked else
+                               "hooks/vault-mcp-open-terminal.sh --host " + setup_host + " --url " + base_url),
+            "interactive_setup": ("" if blocked else
+                                  "hooks/vault-mcp-setup.sh --host " + setup_host + " --url " + base_url + " --interactive"),
+            "verify_setup": ("" if blocked else
+                             "hooks/vault-mcp-setup.sh --host " + setup_host + " --url " + base_url + " --verify"),
+            "claude_headers_helper": helper_path,
+            "write_codex_config": ("" if blocked else
+                                   "hooks/vault-mcp-setup.sh --host codex --url " + base_url + " --write-config"),
+            "write_claude_helper": ("" if blocked else
+                                    "hooks/vault-mcp-setup.sh --host claude --url " + base_url + " --write-helper"),
+        },
+        "hosts": {
+            "codex": {
+                "enabled": setup_host in ("all", "codex"),
+                "config_owner": "user-level ~/.codex/config.toml",
+                "snippet": ("" if blocked else codex_snippet),
+                "secret_handling": "Codex reads the bearer token from OBSIDIAN_API_KEY via bearer_token_env_var.",
+            },
+            "claude": {
+                "enabled": setup_host in ("all", "claude"),
+                "config_owner": "user or local Claude Code MCP config",
+                "snippet": ({} if blocked else claude_snippet),
+                "secret_handling": "Claude Code runs headersHelper at connection time; the helper reads OBSIDIAN_API_KEY or macOS Keychain and prints only request headers to the MCP client.",
+            },
+        },
+        "manual_steps": manual_steps,
+        "next_command": ("provider configure --path <loopback Obsidian URL>" if blocked else
+                         "hooks/vault-mcp-open-terminal.sh --host " + setup_host + " --url " + base_url),
+    }
+
+
+def write_provider_prefetch_markdown(path, obj):
+    # Bash write_provider_prefetch_markdown (4115-4129).
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    parts = ["# Vault Provider Prefetch\n\n"]
+    parts.append("Generated: %s\n\n" % clock.iso_now())
+    parts.append("Provider: %s\n" % _nav(obj, "provider", "type"))
+    parts.append("Available: %s\n" % _bool(_nav(obj, "provider", "available")))
+    parts.append("Health: %s\n" % _jq_or(_nav(obj, "provider", "health", "status"), "unknown"))
+    parts.append("Auth: %s\n" % _jq_or(_nav(obj, "provider", "auth", "status"), "unknown"))
+    parts.append("Direct search ready: %s\n" % _bool(obj.get("direct_search_ready") is True))
+    parts.append("Query: %s\n\n" % obj.get("query"))
+    parts.append("Use this as a bounded handoff for an Obsidian/Vault search. Direct search "
+                 "requires an authenticated MCP tool in the current session; a local API key "
+                 "may validate auth but does not by itself provide a search tool. If direct "
+                 "search is not ready, continue with local memory + web. Save only curated, "
+                 "publish-safe notes back through the provider.\n")
+    store.atomic_write(path, "".join(parts))
+
+
+def write_provider_sync_markdown(path, obj):
+    # Bash write_provider_sync_markdown (4131-4158).
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    candidates = obj.get("candidates") if isinstance(obj.get("candidates"), dict) else {}
+    exported = _jq_or(candidates.get("exported_count"), candidates.get("count"))
+    parts = ["# Vault Provider Sync\n\n"]
+    parts.append("Generated: %s\n\n" % clock.iso_now())
+    parts.append("Provider: %s\n" % _nav(obj, "provider", "type"))
+    parts.append("Available: %s\n" % _bool(_nav(obj, "provider", "available")))
+    parts.append("Health: %s\n" % _jq_or(_nav(obj, "provider", "health", "status"), "unknown"))
+    parts.append("Auth: %s\n" % _jq_or(_nav(obj, "provider", "auth", "status"), "unknown"))
+    parts.append("Direct write ready: %s\n" % _bool(obj.get("direct_write_ready") is True))
+    parts.append("Candidates exported: %s\n" % exported)
+    parts.append("Total pending: %s\n" % candidates.get("count"))
+    parts.append("Omitted: %s\n\n" % _jq_or(candidates.get("omitted_count"), 0))
+    parts.append("Policy: review this bounded handoff before writing to the Vault. Direct "
+                 "external writes require an authenticated MCP write tool in the current "
+                 "session; a local API key may validate auth but does not by itself provide a "
+                 "write tool. This handoff includes only current, non-private, non-security "
+                 "learnings with verified repo-relative evidence. Remaining candidates stay "
+                 "pending for a later sync.\n\n")
+    if exported == 0:
+        parts.append("No new publish-safe learning candidates are pending for Vault sync.\n")
+    else:
+        parts.append("## Candidates\n\n")
+        rows_list = _nav(obj, "candidates", "rows")
+        rows_list = rows_list if isinstance(rows_list, list) else []
+        for row in rows_list:
+            evidence = row.get("evidence")
+            evidence = evidence if isinstance(evidence, list) else []
+            first_evidence = _jq_or(evidence[0] if evidence else None, "NOT VERIFIED")
+            summary = str(_jq_or(row.get("summary"), "")).replace("\n", " ")[:260]
+            parts.append("- [" + _jq_or(row.get("topic"), "uncategorized") + " \u00b7 "
+                         + _jq_or(row.get("kind"), "learning") + " \u00b7 "
+                         + _jq_or(row.get("id"), "") + "] " + summary
+                         + " (evidence: " + str(first_evidence) + ")\n")
+    store.atomic_write(path, "".join(parts))
+
+
+def _sync_max():
+    # Bash: KIMIFLOW_PROVIDER_SYNC_MAX (non-digit/empty -> 20; <= 0 -> 20).
+    raw = os.environ.get("KIMIFLOW_PROVIDER_SYNC_MAX", "")
+    if not raw or not all(c in "0123456789" for c in raw):
+        return 20
+    value = int(raw)
+    return value if value > 0 else 20
+
+
+def _write_manifest(manifest, obj):
+    # Bash `printf '%s\n' "$out" | jq . > "$manifest"` (pretty + trailing newline).
+    store.atomic_write(manifest, contracts.dumps(obj, pretty=True) + "\n")
+
+
+def run(argv):
+    action = argv[0] if argv else "status"
+    rest = argv[1:] if argv else []
+    root = ""
+    pretty = False
+    vtype = "obsidian"
+    available = ""
+    vault_path = ""
+    query = ""
+    write = False
+    setup_host = "all"
+    i = 0
+    while i < len(rest):
+        arg = rest[i]
+        if arg == "--root":
+            i += 1
+            root = rest[i] if i < len(rest) else ""
+        elif arg == "--type":
+            i += 1
+            vtype = rest[i] if i < len(rest) else ""
+        elif arg == "--available":
+            i += 1
+            available = rest[i] if i < len(rest) else ""
+        elif arg == "--path":
+            i += 1
+            vault_path = rest[i] if i < len(rest) else ""
+        elif arg == "--query":
+            i += 1
+            query = rest[i] if i < len(rest) else ""
+        elif arg in ("--host", "--target"):
+            i += 1
+            setup_host = rest[i] if i < len(rest) else "all"
+        elif arg == "--write":
+            write = True
+        elif arg == "--pretty":
+            pretty = True
+        elif arg in ("--help", "-h"):
+            usage()
+            return 0
+        else:
+            return die("provider: unknown argument: %s" % arg, 2)
+        i += 1
+
+    root = resolve_root(root)
+    project = root + "/.kimiflow/project"
+    manifest = project + "/VAULT-PROVIDER.json"
+    now = clock.iso_now()
+
+    if action == "status":
+        out = status_json(manifest)
+    elif action == "health":
+        provider = status_json(manifest)
+        out = {
+            "schema_version": 1,
+            "status": _jq_or(_nav(provider, "health", "status"), "unknown"),
+            "recommended_action": _jq_or(_nav(provider, "health", "recommended_action"), "open_obsidian"),
+            "health": provider.get("health"),
+            "auth": provider.get("auth"),
+            "detection": provider.get("detection"),
+            "capabilities": provider.get("capabilities"),
+            "provider": provider,
+        }
+    elif action == "setup":
+        provider = status_json(manifest)
+        out = provider_setup_plan_json(provider, setup_host)
+    elif action in ("detect", "connect"):
+        detection = detection_json()
+        if detection.get("available") is not True:
+            out = {
+                "schema_version": 1,
+                "status": "not_detected",
+                "written": False,
+                "path": _PROVIDER_PATH,
+                "detection": detection,
+                "provider": None,
+            }
+        else:
+            if action == "connect":
+                write = True
+            if write:
+                existing = manifest_json(manifest)
+                sids = _jq_or(existing.get("synced_learning_ids"), [])
+                sids = sids if isinstance(sids, list) else []
+                out = {
+                    "schema_version": 1,
+                    "type": "obsidian",
+                    "available": True,
+                    "mode": _jq_or(existing.get("mode"), "local-first"),
+                    "vault_path": detection.get("url"),
+                    "last_prefetch_at": _jq_or(existing.get("last_prefetch_at"), None),
+                    "last_write_at": _jq_or(existing.get("last_write_at"), None),
+                    "synced_learning_ids": sids,
+                    "detection": detection,
+                    "updated_at": now,
+                }
+                os.makedirs(project, exist_ok=True)
+                _write_manifest(manifest, out)
+            provider = status_json(manifest)
+            out = {
+                "schema_version": 1,
+                "status": ("connected" if write else "detected"),
+                "written": write,
+                "path": _PROVIDER_PATH,
+                "detection": detection,
+                "provider": provider,
+            }
+    elif action == "configure":
+        if available in ("1", "true", "TRUE", "yes", "YES"):
+            available_json = True
+        elif available in ("0", "false", "FALSE", "no", "NO", ""):
+            available_json = False
+        else:
+            return die("provider configure --available must be true or false", 2)
+        out = {
+            "schema_version": 1,
+            "type": vtype,
+            "available": available_json,
+            "mode": "local-first",
+            "vault_path": vault_path,
+            "last_prefetch_at": None,
+            "last_write_at": None,
+            "synced_learning_ids": [],
+            "updated_at": now,
+        }
+        os.makedirs(project, exist_ok=True)
+        _write_manifest(manifest, out)
+        out = status_json(manifest)
+    elif action == "prefetch":
+        provider = status_json(manifest)
+        prefetch_path = project + "/VAULT-PREFETCH.md"
+        if provider.get("available") is not True:
+            out = {
+                "schema_version": 1,
+                "status": "skipped",
+                "reason": "provider_unavailable",
+                "path": ".kimiflow/project/VAULT-PREFETCH.md",
+                "provider": provider,
+            }
+        else:
+            if not query:
+                query = "project memory recall"
+            out = {
+                "schema_version": 1,
+                "status": "prefetch_handoff",
+                "query": query,
+                "path": ".kimiflow/project/VAULT-PREFETCH.md",
+                "provider": provider,
+                "direct_search_ready": _nav(provider, "health", "direct_search_ready") is True,
+                "review_required": True,
+            }
+            if write:
+                os.makedirs(project, exist_ok=True)
+                write_provider_prefetch_markdown(prefetch_path, out)
+                updated = manifest_json(manifest)
+                updated["last_prefetch_at"] = now
+                updated["updated_at"] = now
+                updated["available"] = True
+                _write_manifest(manifest, updated)
+                out["written"] = True
+    elif action == "sync":
+        provider = status_json(manifest)
+        sync_path = project + "/VAULT-SYNC.md"
+        if provider.get("available") is not True:
+            out = {
+                "schema_version": 1,
+                "status": "skipped",
+                "reason": "provider_unavailable",
+                "path": ".kimiflow/project/VAULT-SYNC.md",
+                "provider": provider,
+                "candidates": {"count": 0, "exported_count": 0, "omitted_count": 0, "ids": []},
+            }
+        else:
+            sync_max = _sync_max()
+            candidates = _sync_candidates(root, project + "/LEARNINGS.jsonl", manifest)
+            export_candidates = candidates[:sync_max]
+            omitted = len(candidates) - len(export_candidates)
+            out = {
+                "schema_version": 1,
+                "status": "sync_handoff",
+                "path": ".kimiflow/project/VAULT-SYNC.md",
+                "provider": provider,
+                "direct_write_ready": _nav(provider, "health", "direct_write_ready") is True,
+                "review_required": True,
+                "candidates": {
+                    "count": len(candidates),
+                    "exported_count": len(export_candidates),
+                    "omitted_count": omitted,
+                    "ids": [c.get("id") for c in export_candidates],
+                },
+                "written": False,
+            }
+            if write:
+                os.makedirs(project, exist_ok=True)
+                handoff = dict(out)
+                handoff["candidates"] = dict(out["candidates"], rows=export_candidates)
+                write_provider_sync_markdown(sync_path, handoff)
+                new_ids = [c.get("id") for c in export_candidates]
+                updated = manifest_json(manifest)
+                existing_ids = _jq_or(updated.get("synced_learning_ids"), [])
+                existing_ids = existing_ids if isinstance(existing_ids, list) else []
+                updated["last_write_at"] = now
+                updated["updated_at"] = now
+                updated["available"] = True
+                updated["synced_learning_ids"] = sorted(set(existing_ids + new_ids))
+                _write_manifest(manifest, updated)
+                provider = status_json(manifest)
+                out["written"] = True
+                out["provider"] = provider
+    else:
+        return die("provider action must be status, health, setup, detect, connect, "
+                   "configure, prefetch, or sync", 2)
+
+    contracts.json_print(out, pretty)
+    return 0

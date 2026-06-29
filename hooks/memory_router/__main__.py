@@ -29,6 +29,7 @@ from . import history as _history
 from . import index as _index
 from . import metrics as _metrics
 from . import propose as _propose
+from . import provider as _provider
 from . import recall as _recall
 from . import record as _record
 from . import review as _review
@@ -43,6 +44,7 @@ COMMANDS = {
     "index": _index.run,
     "metrics": _metrics.run,
     "propose": _propose.run,
+    "provider": _provider.run,
     "recall": _recall.run,
     "record": _record.run,
     "review-run": _review.run,

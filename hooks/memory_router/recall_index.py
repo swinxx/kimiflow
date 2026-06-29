@@ -7,7 +7,7 @@ import os
 import re
 import sqlite3
 
-from . import clock
+from . import clock, paths, store
 
 # Source of truth: Bash 2562-2563.
 _SCHEMA = (
@@ -18,6 +18,16 @@ _SCHEMA = (
 )
 
 _NON_TERM = re.compile(r"[^A-Za-z0-9_]")
+
+# Bash build_recall_index run-artifact filter (2613-2620): match these basenames
+# anywhere under .kimiflow (except the pruned project dir), plus any *.md under a
+# findings/ directory.
+_ARTIFACT_NAMES = frozenset((
+    "INTENT.md", "PROBLEM.md", "RESEARCH.md", "DIAGNOSIS.md", "PLAN.md",
+    "ACCEPTANCE.md", "REVIEW.md", "CODE-REVIEW.md", "LEARNING-REVIEW.md",
+    "ADVISORIES.md",
+))
+_MIDDOT = "\u00b7"  # U+00B7 MIDDLE DOT; never write the literal char (handoff gotcha).
 
 
 def fts5_available():
@@ -42,6 +52,8 @@ def recall_db_path(root):
 
 def init_recall_db(con):
     # Bash 2559-2565: drop+create the schema, then stamp recall_meta.updated_at.
+    # Caller must confirm fts5_available() first (the CREATE VIRTUAL TABLE here
+    # would raise sqlite3.OperationalError otherwise).
     con.executescript(_SCHEMA)
     con.execute(
         "INSERT INTO recall_meta(key, value) VALUES('updated_at', ?)", (clock.iso_now(),)
@@ -90,3 +102,127 @@ def fts_hits_json(root, terms, max_hits):
         return []
     finally:
         con.close()
+
+
+def _read_body(path):
+    # Bash reads the file via `sed`, which splits on \n only and leaves any \r in
+    # place. newline="" disables Python's universal-newline translation so \r\n /
+    # bare \r survive to _first_lines (store.read_text would collapse them to \n).
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            return handle.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _first_lines(text, count=180):
+    # Bash `body="$(sed -n '1,180p' file)"`: take the first `count` lines (sed splits
+    # only on \n), then command substitution strips trailing newlines.
+    return "\n".join(text.split("\n")[:count]).rstrip("\n")
+
+
+def _jq_or(value, default):
+    # jq `value // default`: substitute the default when value is null (None) or
+    # false. An empty string / 0 is truthy in jq and passes through unchanged.
+    return default if value is None or value is False else value
+
+
+def _evidence_ref(row):
+    # jq `(.evidence // []) | .[0] // ""`: first evidence entry, or "" when the list
+    # is missing/empty/non-indexable or its first entry is null/false.
+    evidence = _jq_or(row.get("evidence"), [])
+    first = evidence[0] if isinstance(evidence, list) and evidence else None
+    first = _jq_or(first, "")
+    return "" if first == "" else str(first)
+
+
+def _artifact_title(rel):
+    # Bash awk -F/ '{print $2 " <middot> " substr($0, length($1 "/" $2 "/") + 1)}':
+    # second path component, then everything after the first two components.
+    parts = rel.split("/")
+    second = parts[1] if len(parts) > 1 else ""
+    prefix_len = len(parts[0]) + 1 + len(second) + 1  # length("$1/$2/")
+    return second + " " + _MIDDOT + " " + rel[prefix_len:]
+
+
+def _iter_run_artifacts(root):
+    # Bash find: traverse $root/.kimiflow, prune the project dir, then yield regular
+    # files whose basename is a matched name OR whose path is */findings/*.md.
+    base = os.path.join(root, ".kimiflow")
+    project = os.path.join(base, "project")
+    matches = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        if dirpath == project:
+            dirnames[:] = []  # prune: do not descend into .kimiflow/project
+            continue
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            rel = paths.rel_path(root, full)
+            if name in _ARTIFACT_NAMES or ("/findings/" in rel and rel.endswith(".md")):
+                matches.append((rel, full))
+    # find's native order is filesystem-dependent; sort for deterministic insertion
+    # (observable only via fts_hits_json LIMIT, which has no ORDER BY).
+    matches.sort()
+    return matches
+
+
+def build_recall_index(root, db_path):
+    """Populate RECALL.sqlite from all memory sources. Port of Bash build_recall_index
+    (2547-2621). Returns 2 when FTS5 is unavailable (mirrors `sqlite_available ||
+    return 2`), else 0 after committing the rebuilt index."""
+    if not fts5_available():
+        return 2
+    project = os.path.join(root, ".kimiflow", "project")
+    memory = os.path.join(project, "MEMORY.md")
+    user_memory = os.path.join(project, "USER.md")
+    learnings = os.path.join(project, "LEARNINGS.jsonl")
+    user_rows = os.path.join(project, "USER.jsonl")
+    facts = os.path.join(project, "FACTS.jsonl")
+    os.makedirs(project, exist_ok=True)
+
+    con = sqlite3.connect(db_path)
+    try:
+        init_recall_db(con)
+
+        if os.path.isfile(memory):
+            body = _first_lines(_read_body(memory))
+            insert_fts_row(con, "memory", ".kimiflow/project/MEMORY.md",
+                           "Project Memory", body, ".kimiflow/project/MEMORY.md")
+        if os.path.isfile(user_memory):
+            body = _first_lines(_read_body(user_memory))
+            insert_fts_row(con, "user_profile", ".kimiflow/project/USER.md",
+                           "User Profile", body, ".kimiflow/project/USER.md")
+
+        for row in store.read_jsonl(learnings):
+            if _jq_or(row.get("status"), "current") != "current":
+                continue
+            title = "%s %s %s %s %s" % (
+                _jq_or(row.get("topic"), "uncategorized"), _MIDDOT,
+                _jq_or(row.get("kind"), "learning"), _MIDDOT, _jq_or(row.get("id"), ""))
+            insert_fts_row(con, "learning", ".kimiflow/project/LEARNINGS.jsonl",
+                           title, str(_jq_or(row.get("summary"), "")), _evidence_ref(row))
+
+        for row in store.read_jsonl(user_rows):
+            if _jq_or(row.get("status"), "current") != "current":
+                continue
+            title = "%s %s %s" % (
+                _jq_or(row.get("topic"), "profile"), _MIDDOT, _jq_or(row.get("id"), ""))
+            insert_fts_row(con, "user_profile", ".kimiflow/project/USER.jsonl",
+                           title, str(_jq_or(row.get("summary"), "")), _evidence_ref(row))
+
+        for row in store.read_jsonl(facts):
+            inner = "%s %s %s" % (
+                _jq_or(row.get("area"), "codebase"), _MIDDOT, _jq_or(row.get("path"), ""))
+            title = "%s %s %s" % (_jq_or(row.get("kind"), "fact"), _MIDDOT, inner)
+            ref = "%s:%s" % (_jq_or(row.get("path"), ""), str(_jq_or(row.get("line"), 1)))
+            insert_fts_row(con, "fact", ".kimiflow/project/FACTS.jsonl",
+                           title, str(_jq_or(row.get("summary"), "")), ref)
+
+        for rel, full in _iter_run_artifacts(root):
+            body = _first_lines(_read_body(full))
+            insert_fts_row(con, "run_artifact", rel, _artifact_title(rel), body, rel)
+
+        con.commit()
+    finally:
+        con.close()
+    return 0

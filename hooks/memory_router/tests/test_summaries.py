@@ -431,5 +431,158 @@ class GlobalEfficiencySummaryCase(_FixtureCase):
         ])
 
 
+_FRESH = "2999-12-31"   # always >= the default-90 cutoff -> not stale
+_STALE = "2000-01-01"   # always < the cutoff -> stale
+
+
+class _LearningCase(_FixtureCase):
+    def learnings(self, rows):
+        return self.write("LEARNINGS.jsonl", rows)
+
+    def usage(self, items):
+        import json
+        return self.write_raw("MEMORY-USAGE.json", json.dumps({"items": items}))
+
+    def call(self, fn, learnings, usage_file, stale_after=None):
+        env = {} if stale_after is None else {"KIMIFLOW_LEARNING_STALE_AFTER_DAYS": stale_after}
+        with mock.patch.dict(os.environ, env, clear=True):
+            return fn(learnings, usage_file)
+
+
+class LearningLifecycleCase(_LearningCase):
+    def lc(self, learnings, usage_file, stale_after=None):
+        return self.call(summaries.learning_lifecycle_json, learnings, usage_file, stale_after)
+
+    def test_missing_absent_shape(self):
+        r = self.lc(self.missing("L.jsonl"), self.missing("U.json"))
+        self.assertEqual(list(r.keys()), [
+            "stale_after_days", "cutoff_date", "current", "stale_candidates",
+            "stale_candidate_ids", "unused_current", "used_current",
+        ])
+        self.assertEqual(r["stale_after_days"], 90)
+        self.assertEqual((r["current"], r["stale_candidates"], r["unused_current"], r["used_current"]), (0, 0, 0, 0))
+
+    def test_present_shape_keys(self):
+        L = self.learnings(['{"id":"a","status":"current","last_verified":"%s"}' % _FRESH])
+        keys = list(self.lc(L, self.missing("U.json")).keys())
+        self.assertEqual(keys, [
+            "stale_after_days", "cutoff_date", "current", "stale_candidates",
+            "stale_candidate_ids", "unused_current", "unused_current_ids",
+            "cold_candidate_ids", "used_current", "used_current_ids",
+        ])
+
+    def test_used_unused_split(self):
+        L = self.learnings([
+            '{"id":"u1","status":"current","last_verified":"%s"}' % _FRESH,
+            '{"id":"u2","status":"current","last_verified":"%s"}' % _FRESH,
+            '{"id":"u3","status":"current","last_verified":"%s"}' % _FRESH,
+        ])
+        U = self.usage({"learning:u1": {"use_count": 1}, "learning:u2": None})  # null -> untracked
+        r = self.lc(L, U)
+        self.assertEqual((r["used_current"], r["unused_current"]), (1, 2))
+        self.assertEqual(r["used_current_ids"], ["u1"])
+        self.assertEqual(r["unused_current_ids"], ["u2", "u3"])
+
+    def test_stale_includes_missing_last_verified(self):
+        L = self.learnings([
+            '{"id":"fresh","status":"current","last_verified":"%s"}' % _FRESH,
+            '{"id":"old","status":"current","last_verified":"%s"}' % _STALE,
+            '{"id":"never","status":"current"}',   # missing last_verified -> "" < cutoff -> stale
+            '{"id":"arch","status":"archived","last_verified":"%s"}' % _STALE,  # excluded
+        ])
+        r = self.lc(L, self.missing("U.json"))
+        self.assertEqual(r["current"], 3)
+        self.assertEqual(r["stale_candidate_ids"], ["old", "never"])
+
+    def test_id_capping(self):
+        L = self.learnings(['{"id":"c%02d","status":"current","last_verified":"%s"}' % (i, _FRESH) for i in range(25)])
+        r = self.lc(L, self.missing("U.json"))
+        self.assertEqual(r["unused_current"], 25)
+        self.assertEqual(len(r["unused_current_ids"]), 20)
+        self.assertEqual(len(r["cold_candidate_ids"]), 10)
+
+    def test_stale_after_env_override(self):
+        L = self.learnings(['{"id":"a","status":"current","last_verified":"%s"}' % _FRESH])
+        self.assertEqual(self.lc(L, self.missing("U.json"), stale_after="30")["stale_after_days"], 30)
+        self.assertEqual(self.lc(L, self.missing("U.json"), stale_after="abc")["stale_after_days"], 90)
+
+    def test_non_string_last_verified_cross_type(self):
+        # jq total order: number/bool sort below the string cutoff (stale); array/object
+        # above (not stale). Must not raise (a raw Python `<` would TypeError).
+        L = self.learnings([
+            '{"id":"num","status":"current","last_verified":123}',
+            '{"id":"tru","status":"current","last_verified":true}',
+            '{"id":"arr","status":"current","last_verified":[]}',
+            '{"id":"obj","status":"current","last_verified":{}}',
+            '{"id":"fresh","status":"current","last_verified":"%s"}' % _FRESH,
+        ])
+        self.assertEqual(self.lc(L, self.missing("U.json"))["stale_candidate_ids"], ["num", "tru"])
+
+
+class LearningUsefulnessCase(_LearningCase):
+    def lu(self, learnings, usage_file, stale_after=None):
+        return self.call(summaries.learning_usefulness_json, learnings, usage_file, stale_after)
+
+    def test_missing_absent_shape(self):
+        r = self.lu(self.missing("L.jsonl"), self.missing("U.json"))
+        self.assertEqual(list(r.keys()), [
+            "schema_version", "stale_after_days", "cutoff_date",
+            "hot", "warm", "cold", "stale", "promote_candidates", "compress_candidates",
+        ])
+        self.assertNotIn("basis", r)
+        self.assertEqual(r["hot"], {"count": 0, "ids": []})
+
+    def test_tiers_and_stale_precedence(self):
+        L = self.learnings([
+            '{"id":"hot","status":"current","last_verified":"%s","confidence":"high"}' % _FRESH,
+            '{"id":"warm","status":"current","last_verified":"%s","confidence":"high"}' % _FRESH,
+            '{"id":"cold","status":"current","last_verified":"%s","confidence":"high"}' % _FRESH,
+            '{"id":"stale_hot","status":"current","last_verified":"%s","confidence":"high"}' % _STALE,
+        ])
+        U = self.usage({
+            "learning:hot": {"use_count": 5},
+            "learning:warm": {"use_count": 1},
+            "learning:cold": {"use_count": 0},
+            "learning:stale_hot": {"use_count": 9},  # stale wins over use_count
+        })
+        r = self.lu(L, U)
+        self.assertEqual(r["hot"]["ids"], ["hot"])
+        self.assertEqual(r["warm"]["ids"], ["warm"])
+        self.assertEqual(r["cold"]["ids"], ["cold"])
+        self.assertEqual(r["stale"]["ids"], ["stale_hot"])
+        self.assertEqual(r["compress_candidates"]["ids"], ["cold", "stale_hot"])  # cold + stale
+        self.assertEqual(r["basis"], "exclusive_tiers_current_rows; stale rows are never promote candidates")
+
+    def test_promote_confidence_and_sensitivity(self):
+        L = self.learnings([
+            '{"id":"hi","status":"current","last_verified":"%s","confidence":"high","sensitivity":"normal"}' % _FRESH,
+            '{"id":"med","status":"current","last_verified":"%s"}' % _FRESH,  # confidence default medium
+            '{"id":"low","status":"current","last_verified":"%s","confidence":"low"}' % _FRESH,
+            '{"id":"priv","status":"current","last_verified":"%s","confidence":"high","sensitivity":"private"}' % _FRESH,
+        ])
+        U = self.usage({k: {"use_count": 2} for k in
+                        ("learning:hi", "learning:med", "learning:low", "learning:priv")})
+        r = self.lu(L, U)
+        self.assertEqual(r["promote_candidates"]["ids"], ["hi", "med"])  # low excluded, private excluded
+
+    def test_use_count_string_is_tonumbered(self):
+        L = self.learnings(['{"id":"s","status":"current","last_verified":"%s"}' % _FRESH])
+        U = self.usage({"learning:s": {"use_count": "2"}})  # string -> 2 -> hot
+        self.assertEqual(self.lu(L, U)["hot"]["ids"], ["s"])
+
+    def test_bounded_ids_cap_20(self):
+        L = self.learnings(['{"id":"c%02d","status":"current","last_verified":"%s"}' % (i, _FRESH) for i in range(25)])
+        self.assertEqual(len(self.lu(L, self.missing("U.json"))["cold"]["ids"]), 20)
+
+    def test_non_string_last_verified_is_stale_not_hot(self):
+        # A number last_verified sorts below the string cutoff -> stale tier (never hot),
+        # without raising.
+        L = self.learnings(['{"id":"num","status":"current","last_verified":123}'])
+        U = self.usage({"learning:num": {"use_count": 9}})
+        r = self.lu(L, U)
+        self.assertEqual(r["stale"]["ids"], ["num"])
+        self.assertEqual(r["hot"]["ids"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

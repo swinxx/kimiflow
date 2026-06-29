@@ -7,7 +7,7 @@ subcommand."""
 import math
 import os
 
-from . import global_metrics, store
+from . import clock, global_metrics, store
 
 _PROPOSALS_PATH = ".kimiflow/project/PROPOSALS.jsonl"
 _USAGE_PATH = ".kimiflow/project/MEMORY-USAGE.json"
@@ -527,4 +527,165 @@ def global_efficiency_summary_json():
             "project_id_salted_hash": True,
         },
         "note": note,
+    }
+
+
+_LEARNINGS_DEFAULT_STALE_AFTER = 90
+
+
+def _learning_stale_after():
+    # Bash: ${KIMIFLOW_LEARNING_STALE_AFTER_DAYS:-90}; then case ''|*[!0-9]* -> 90.
+    # Only a non-empty all-ASCII-digit value is honored (so "0" is valid).
+    raw = os.environ.get("KIMIFLOW_LEARNING_STALE_AFTER_DAYS")
+    if raw and all(c in "0123456789" for c in raw):
+        return int(raw)
+    return _LEARNINGS_DEFAULT_STALE_AFTER
+
+
+def _usage_items(usage_file):
+    # Bash: usage='{}'; if [ -f file ] && jq -e . file; then usage=$(jq -c '.items // {}').
+    # store.read_json -> None for missing/invalid/null; a valid non-dict top level (Bash
+    # passes `jq -e .` then errors on `.items`) and a non-dict `.items` both fall back to
+    # {} here (more robust; MEMORY-USAGE.json is always an object -> unreachable).
+    data = store.read_json(usage_file)
+    if not isinstance(data, dict):
+        return {}
+    items = _jq_or(data.get("items"), {})
+    return items if isinstance(items, dict) else {}
+
+
+def _current_rows(learnings):
+    # jq: split lines | fromjson?//empty | select((.status // "current") == "current").
+    return [r for r in store.read_jsonl(learnings)
+            if _jq_or(r.get("status"), "current") == "current"]
+
+
+def _learning_id(row):
+    # jq `.id // ""` (null/false/missing -> "").
+    return _jq_or(row.get("id"), "")
+
+
+def _last_verified_is_stale(row, cutoff):
+    # jq `(cutoff != "") and ((.last_verified // "") < cutoff)` with jq's total order:
+    # after `// ""`, null/false are "" (string compare); a non-string last_verified is
+    # compared cross-type -- bool/number sort BELOW strings (stale), array/object ABOVE
+    # (not stale). Guards the malformed non-string case that a raw Python `<` would crash.
+    if cutoff == "":
+        return False
+    value = _jq_or(row.get("last_verified"), "")
+    if isinstance(value, str):
+        return value < cutoff
+    if isinstance(value, bool) or isinstance(value, (int, float)):
+        return True
+    return False
+
+
+def learning_lifecycle_json(learnings, usage_file):
+    # Bash learning_lifecycle_json (599-651): current LEARNINGS rows split into
+    # used/unused (by MEMORY-USAGE.json `items["learning:<id>"]` presence) and
+    # stale_candidates (last_verified < cutoff). Missing learnings -> a smaller absent
+    # shape (omits the *_ids lists).
+    stale_after = _learning_stale_after()
+    cutoff = clock.date_days_ago(stale_after)
+    cutoff_date = cutoff if cutoff != "" else None
+
+    if not os.path.isfile(learnings):
+        return {
+            "stale_after_days": stale_after,
+            "cutoff_date": cutoff_date,
+            "current": 0,
+            "stale_candidates": 0,
+            "stale_candidate_ids": [],
+            "unused_current": 0,
+            "used_current": 0,
+        }
+
+    usage = _usage_items(usage_file)
+    current = _current_rows(learnings)
+    ids = [i for i in (_learning_id(r) for r in current) if len(i) > 0]
+
+    def tracked(i):
+        # jq `($usage["learning:" + .] // null) != null`: present and not null/false.
+        value = usage.get("learning:" + i)
+        return value is not None and value is not False
+
+    used = [i for i in ids if tracked(i)]
+    unused = [i for i in ids if not tracked(i)]
+    stale_ids = [_learning_id(r) for r in current if _last_verified_is_stale(r, cutoff)]
+
+    return {
+        "stale_after_days": stale_after,
+        "cutoff_date": cutoff_date,
+        "current": len(current),
+        "stale_candidates": len(stale_ids),
+        "stale_candidate_ids": stale_ids,
+        "unused_current": len(unused),
+        "unused_current_ids": unused[:20],
+        "cold_candidate_ids": unused[:10],
+        "used_current": len(used),
+        "used_current_ids": used[:20],
+    }
+
+
+def _bounded_ids(rows):
+    # jq `map(.id // "") | map(select(length > 0)) | .[:20]`.
+    return [i for i in (_learning_id(r) for r in rows) if len(i) > 0][:20]
+
+
+def learning_usefulness_json(learnings, usage_file):
+    # Bash learning_usefulness_json (653-712): classifies current rows into exclusive
+    # hot/warm/cold/stale tiers by use_count + staleness, then promote (hot+warm with
+    # safe confidence/sensitivity) and compress (cold+stale) candidates.
+    stale_after = _learning_stale_after()
+    cutoff = clock.date_days_ago(stale_after)
+    cutoff_date = cutoff if cutoff != "" else None
+    usage = _usage_items(usage_file)
+
+    if not os.path.isfile(learnings):
+        empty = {"count": 0, "ids": []}
+        return {
+            "schema_version": 1,
+            "stale_after_days": stale_after,
+            "cutoff_date": cutoff_date,
+            "hot": dict(empty),
+            "warm": dict(empty),
+            "cold": dict(empty),
+            "stale": dict(empty),
+            "promote_candidates": dict(empty),
+            "compress_candidates": dict(empty),
+        }
+
+    rows = []
+    for r in _current_rows(learnings):
+        entry = usage.get("learning:" + _learning_id(r))
+        raw_uc = entry.get("use_count") if isinstance(entry, dict) else None
+        use_count = _n(_jq_or(raw_uc, 0))
+        is_stale = _last_verified_is_stale(r, cutoff)
+        rows.append(dict(r, use_count=use_count, is_stale=is_stale))
+
+    stale = [r for r in rows if r["is_stale"]]
+    hot = [r for r in rows if not r["is_stale"] and r["use_count"] >= 2]
+    warm = [r for r in rows if not r["is_stale"] and r["use_count"] == 1]
+    cold = [r for r in rows if not r["is_stale"] and r["use_count"] == 0]
+    promote = [
+        r for r in (hot + warm)
+        if _jq_or(r.get("confidence"), "medium") in ("high", "medium")
+        and _jq_or(r.get("sensitivity"), "normal") not in ("private", "security")
+    ]
+    compress = cold + stale
+
+    def tier(rows_):
+        return {"count": len(rows_), "ids": _bounded_ids(rows_)}
+
+    return {
+        "schema_version": 1,
+        "stale_after_days": stale_after,
+        "cutoff_date": cutoff_date,
+        "hot": tier(hot),
+        "warm": tier(warm),
+        "cold": tier(cold),
+        "stale": tier(stale),
+        "promote_candidates": tier(promote),
+        "compress_candidates": tier(compress),
+        "basis": "exclusive_tiers_current_rows; stale rows are never promote candidates",
     }

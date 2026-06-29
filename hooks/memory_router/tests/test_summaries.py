@@ -327,5 +327,109 @@ class EconomicsSummaryCase(_FixtureCase):
             self.assertEqual(r["totals"]["estimated_avoided_scan_tokens"], 1200, bad)
 
 
+class GlobalEfficiencySummaryCase(_FixtureCase):
+    DISPLAY = "~/.kimiflow/metrics/token-economics.jsonl"
+
+    def ge(self, lines=None, env=None):
+        # Drive global_efficiency_summary_json via env: KIMIFLOW_HOME -> self.dir so the
+        # file resolves to <dir>/metrics/token-economics.jsonl. lines=None -> no file.
+        metrics = os.path.join(self.dir, "metrics")
+        os.makedirs(metrics, exist_ok=True)
+        if lines is not None:
+            with open(os.path.join(metrics, "token-economics.jsonl"), "w", encoding="utf-8") as fh:
+                fh.write("".join(line + "\n" for line in lines))
+        environ = {"KIMIFLOW_GLOBAL_METRICS": "on", "KIMIFLOW_HOME": self.dir, "HOME": "/tmp"}
+        if env:
+            environ.update(env)
+        with mock.patch.dict(os.environ, environ):
+            return summaries.global_efficiency_summary_json()
+
+    def test_disabled_absent(self):
+        r = self.ge(["{}"], env={"KIMIFLOW_GLOBAL_METRICS": "off"})
+        self.assertEqual(r["enabled"], False)
+        self.assertEqual(r["present"], False)
+        self.assertEqual(r["path"], self.DISPLAY)
+        self.assertEqual(r["note"], "Global local efficiency stats are disabled by KIMIFLOW_GLOBAL_METRICS.")
+
+    def test_no_base_dir_absent(self):
+        # No KIMIFLOW_HOME and no HOME -> base_dir None -> absent, but enabled stays true.
+        with mock.patch.dict(os.environ, {"KIMIFLOW_GLOBAL_METRICS": "on"}, clear=True):
+            r = summaries.global_efficiency_summary_json()
+        self.assertEqual((r["enabled"], r["present"]), (True, False))
+        self.assertEqual(r["note"], "No global local efficiency rows recorded yet.")
+
+    def test_missing_file_absent_enabled(self):
+        r = self.ge(lines=None)
+        self.assertEqual((r["enabled"], r["present"]), (True, False))
+        self.assertEqual(r["note"], "No global local efficiency rows recorded yet.")
+
+    def test_empty_file_present_zero(self):
+        r = self.ge([])
+        self.assertEqual((r["present"], r["runs_tracked"]), (True, 0))
+        self.assertEqual((r["confidence"], r["verdict"]), ("none", "no_data"))
+        self.assertEqual(r["estimated_savings_percent"], None)
+        self.assertEqual(r["note"], "Too few global local runs for a reliable savings claim; show as an estimate only.")
+
+    def test_mixed_rows_totals_and_projects(self):
+        r = self.ge([
+            '{"net_estimated_tokens_saved":500,"recall_hit_count":4,"used_hit_count":2,"estimated_avoided_scan_tokens":2400,"always_on_tokens":100,"user_memory_tokens":50,"recall_tokens":80,"result":"saving","project_id":"aaa","recorded_day":"2026-06-01"}',
+            '{"net_estimated_tokens_saved":-300,"recall_hit_count":1,"used_hit_count":0,"estimated_avoided_scan_tokens":0,"result":"waste","project_id":"bbb","recorded_day":"2026-06-03"}',
+            '{"net_estimated_tokens_saved":0,"recall_hit_count":2,"used_hit_count":1,"estimated_avoided_scan_tokens":1200,"result":"neutral","project_id":"aaa","recorded_day":"2026-06-02"}',
+            '{"recall_hit_count":0,"result":"unknown"}',
+        ])
+        self.assertEqual(r["runs_tracked"], 4)
+        self.assertEqual(r["projects_tracked"], 2)  # aaa, bbb (null/missing dropped)
+        self.assertEqual(r["totals"]["net_estimated_tokens_saved"], 200)
+        self.assertEqual(r["totals"]["recall_hit_count"], 7)
+        self.assertEqual(r["last_recorded_day"], "2026-06-03")
+        self.assertEqual(r["by_result"], {"saving": 1, "waste": 1, "neutral": 1, "unknown": 1})
+
+    def test_by_result_first_appearance_order(self):
+        r = self.ge([
+            '{"result":"waste","recall_hit_count":1}',
+            '{"result":"saving","recall_hit_count":1,"used_hit_count":1,"net_estimated_tokens_saved":5}',
+            '{"result":"waste","recall_hit_count":1}',
+        ])
+        self.assertEqual(list(r["by_result"].keys()), ["waste", "saving"])
+
+    def test_confidence_verdict_thresholds(self):
+        saving = '{"net_estimated_tokens_saved":1000,"recall_hit_count":3,"used_hit_count":2,"result":"saving"}'
+        self.assertEqual(self.ge([saving] * 7)["confidence"], "low")
+        r8 = self.ge([saving] * 8)
+        self.assertEqual((r8["confidence"], r8["verdict"]), ("medium", "saving_likely"))
+        self.assertEqual(self.ge([saving] * 20)["confidence"], "high")
+
+    def test_enabled_flag_spellings(self):
+        for off in ("off", "OFF", "0", "false", "FALSE", "no", "NO"):
+            self.assertEqual(self.ge(None, env={"KIMIFLOW_GLOBAL_METRICS": off})["enabled"], False, off)
+        for on in ("on", "ON", "1", "yes", "whatever", ""):
+            self.assertEqual(self.ge(None, env={"KIMIFLOW_GLOBAL_METRICS": on})["enabled"], True, on)
+
+    def test_float_total_canonical_integral(self):
+        # jq renders a computed integral-float sum as an int (-5.5 + 2.5 -> -3, not -3.0).
+        r = self.ge([
+            '{"net_estimated_tokens_saved":-5.5,"recall_hit_count":2,"result":"waste"}',
+            '{"net_estimated_tokens_saved":2.5,"recall_hit_count":1,"used_hit_count":1,"result":"saving"}',
+        ])
+        total = r["totals"]["net_estimated_tokens_saved"]
+        self.assertEqual(total, -3)
+        self.assertIsInstance(total, int)
+
+    def test_single_row_float_literal_preserved(self):
+        # A single row's field passes through jq `add` verbatim: 5.0 stays a float.
+        r = self.ge(['{"net_estimated_tokens_saved":5.0,"recall_hit_count":1,"used_hit_count":1,"result":"saving"}'])
+        total = r["totals"]["net_estimated_tokens_saved"]
+        self.assertEqual(total, 5.0)
+        self.assertIsInstance(total, float)
+
+    def test_key_order(self):
+        keys = list(self.ge([]).keys())
+        self.assertEqual(keys, [
+            "enabled", "present", "path", "scope", "runs_tracked", "projects_tracked",
+            "confidence", "verdict", "estimated_savings_percent", "action_required",
+            "by_result", "totals", "averages", "last_recorded_day", "privacy", "note",
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()

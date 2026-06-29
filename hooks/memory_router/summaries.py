@@ -7,12 +7,13 @@ subcommand."""
 import math
 import os
 
-from . import store
+from . import global_metrics, store
 
 _PROPOSALS_PATH = ".kimiflow/project/PROPOSALS.jsonl"
 _USAGE_PATH = ".kimiflow/project/MEMORY-USAGE.json"
 _ECONOMICS_PATH = ".kimiflow/project/MEMORY-ECONOMICS.jsonl"
 _DEFAULT_AVOIDED_PER_HIT = 1200
+_GLOBAL_EFFICIENCY_FILE = "token-economics.jsonl"
 
 
 def _jq_or(value, default):
@@ -27,6 +28,22 @@ def _max_present(values):
     # null when nothing remains.
     kept = [v for v in values if v is not None and v is not False]
     return sorted(kept)[-1] if kept else None
+
+
+def _jq_sum(values):
+    # jq `[ ... ] | add // 0` number rendering: empty -> 0; a single element is returned
+    # verbatim (jq preserves a literal's form, so 5.0 stays 5.0); 2+ elements do real
+    # addition rendered canonically -- an integral float result collapses to an int
+    # (e.g. -5.5 + 2.5 -> -3, not -3.0). (Reachable only with float fields, which real
+    # token-count telemetry never has; this keeps byte-parity with jq regardless.)
+    if not values:
+        return 0
+    if len(values) == 1:
+        return values[0]
+    total = sum(values)
+    if isinstance(total, float) and total.is_integer():
+        return int(total)
+    return total
 
 
 def read_jsonl_summary(path):
@@ -360,5 +377,154 @@ def economics_summary_json(path):
             "used_hit_count_per_run": math.floor(used / n) if n > 0 else 0,
         },
         "last_recorded_at": _max_present([r["recorded_at"] for r in rows]),
+        "note": note,
+    }
+
+
+def _global_efficiency_absent(enabled, display):
+    return {
+        "enabled": enabled,
+        "present": False,
+        "path": display,
+        "scope": "global_local_anonymous",
+        "runs_tracked": 0,
+        "projects_tracked": 0,
+        "confidence": "none",
+        "verdict": "no_data",
+        "estimated_savings_percent": None,
+        "action_required": False,
+        "by_result": {},
+        "totals": {
+            "always_on_tokens": 0,
+            "user_memory_tokens": 0,
+            "recall_tokens": 0,
+            "recall_hit_count": 0,
+            "used_hit_count": 0,
+            "estimated_avoided_scan_tokens": 0,
+            "net_estimated_tokens_saved": 0,
+        },
+        "averages": {
+            "net_estimated_tokens_saved_per_run": 0,
+            "recall_hit_count_per_run": 0,
+            "used_hit_count_per_run": 0,
+        },
+        "last_recorded_day": None,
+        "privacy": {
+            "local_only": True,
+            "stores_content": False,
+            "stores_paths": False,
+            "stores_repo_name": False,
+            "stores_prompts": False,
+            "project_id_salted_hash": True,
+        },
+        "note": (
+            "No global local efficiency rows recorded yet." if enabled
+            else "Global local efficiency stats are disabled by KIMIFLOW_GLOBAL_METRICS."
+        ),
+    }
+
+
+def global_efficiency_summary_json():
+    # Bash global_efficiency_summary_json (483-597): aggregates the cross-project,
+    # local-anonymous token-economics.jsonl. Unlike economics_summary_json this sums the
+    # stored fields directly (NO tonumber / avoided recompute -- the Bash `def n` here is
+    # dead code) and adds enabled/scope/projects_tracked/privacy/last_recorded_day. Reads
+    # env (KIMIFLOW_GLOBAL_METRICS/KIMIFLOW_HOME/HOME) via global_metrics, like the Bash.
+    enabled = global_metrics.enabled()
+    display = global_metrics.display_path()
+    base = global_metrics.base_dir()
+    path = (base + "/" + _GLOBAL_EFFICIENCY_FILE) if base else ""
+    if not enabled or not base or not os.path.isfile(path):
+        return _global_efficiency_absent(enabled, display)
+
+    rows = store.read_jsonl(path)
+    n = len(rows)
+    net = _jq_sum([_jq_or(r.get("net_estimated_tokens_saved"), 0) for r in rows])
+    hits = _jq_sum([_jq_or(r.get("recall_hit_count"), 0) for r in rows])
+    used = _jq_sum([_jq_or(r.get("used_hit_count"), 0) for r in rows])
+    avoided = _jq_sum([_jq_or(r.get("estimated_avoided_scan_tokens"), 0) for r in rows])
+    always = _jq_sum([_jq_or(r.get("always_on_tokens"), 0) for r in rows])
+    user = _jq_sum([_jq_or(r.get("user_memory_tokens"), 0) for r in rows])
+    recall_tokens = _jq_sum([_jq_or(r.get("recall_tokens"), 0) for r in rows])
+    saving = sum(1 for r in rows if _jq_or(r.get("result"), "") == "saving")
+    waste = sum(1 for r in rows if _jq_or(r.get("result"), "") == "waste")
+
+    projects = set()
+    for r in rows:
+        pid = r.get("project_id")
+        if pid is not None and pid is not False:  # jq `.project_id // empty`
+            projects.add(pid)
+
+    if n == 0:
+        confidence = "none"
+    elif n < 8:
+        confidence = "low"
+    elif n < 20:
+        confidence = "medium"
+    else:
+        confidence = "high"
+
+    if n == 0:
+        verdict = "no_data"
+    elif n < 8:
+        verdict = "insufficient_data"
+    elif net > 0 and saving >= waste:
+        verdict = "saving_likely"
+    elif waste > saving or net < 0:
+        verdict = "waste_risk"
+    else:
+        verdict = "neutral"
+
+    by_result = {}
+    for r in rows:
+        key = _jq_or(r.get("result"), "unknown")
+        by_result[key] = by_result.get(key, 0) + 1
+
+    if n < 8:
+        note = "Too few global local runs for a reliable savings claim; show as an estimate only."
+    elif net > 0 and saving >= waste:
+        note = "Global local telemetry suggests memory is likely saving tokens."
+    elif waste > saving or net < 0:
+        note = "Global local telemetry suggests memory may cost more than it saves."
+    else:
+        note = "Global local telemetry is roughly neutral."
+
+    return {
+        "enabled": True,
+        "present": True,
+        "path": display,
+        "scope": "global_local_anonymous",
+        "runs_tracked": n,
+        "projects_tracked": len(projects),
+        "confidence": confidence,
+        "verdict": verdict,
+        "estimated_savings_percent": (
+            math.floor(net * 100 / avoided) if avoided > 0 else None
+        ),
+        "action_required": n >= 8 and (waste > saving or net < 0),
+        "by_result": by_result,
+        "totals": {
+            "always_on_tokens": always,
+            "user_memory_tokens": user,
+            "recall_tokens": recall_tokens,
+            "recall_hit_count": hits,
+            "used_hit_count": used,
+            "estimated_avoided_scan_tokens": avoided,
+            "net_estimated_tokens_saved": net,
+        },
+        "averages": {
+            "net_estimated_tokens_saved_per_run": math.floor(net / n) if n > 0 else 0,
+            "recall_hit_count_per_run": math.floor(hits / n) if n > 0 else 0,
+            "used_hit_count_per_run": math.floor(used / n) if n > 0 else 0,
+        },
+        "last_recorded_day": _max_present([r.get("recorded_day") for r in rows]),
+        "privacy": {
+            "local_only": True,
+            "stores_content": False,
+            "stores_paths": False,
+            "stores_repo_name": False,
+            "stores_prompts": False,
+            "project_id_salted_hash": True,
+        },
         "note": note,
     }

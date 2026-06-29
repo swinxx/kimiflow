@@ -4,6 +4,10 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 ## Unreleased
 
+_No unreleased changes._
+
+## 0.1.52
+
 The `memory-router` hook is now powered by the Python (stdlib) port. `hooks/memory-router.sh` is a thin shim that execs `python3 -m memory_router`, and the ~4400-line Bash implementation has been removed. The CLI contract is unchanged — every subcommand was ported byte-for-byte and grounded against the pinned `kimiflow--v0.1.50` Bash.
 
 ### Changed

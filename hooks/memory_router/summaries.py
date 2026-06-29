@@ -1,14 +1,18 @@
 """JSONL summary aggregators (status/type counters). Behavioral ports of the Bash
-read_jsonl_summary / proposal_summary_json at kimiflow--v0.1.50 (135-171, 79-110).
-Each reads a JSONL file (malformed lines skipped, matching jq `fromjson? // empty`)
-and returns a fixed-shape summary dict; serialization stays at the contracts.dumps
-boundary in the calling subcommand."""
+read_jsonl_summary / proposal_summary_json / usage_summary_json / economics_summary_json
+at kimiflow--v0.1.50 (135-171, 79-110, 184-241, 243-364). Each reads a JSONL/JSON file
+(malformed lines skipped, matching jq `fromjson? // empty`) and returns a fixed-shape
+summary dict; serialization stays at the contracts.dumps boundary in the calling
+subcommand."""
+import math
 import os
 
 from . import store
 
 _PROPOSALS_PATH = ".kimiflow/project/PROPOSALS.jsonl"
 _USAGE_PATH = ".kimiflow/project/MEMORY-USAGE.json"
+_ECONOMICS_PATH = ".kimiflow/project/MEMORY-ECONOMICS.jsonl"
+_DEFAULT_AVOIDED_PER_HIT = 1200
 
 
 def _jq_or(value, default):
@@ -178,4 +182,183 @@ def usage_summary_json(path):
             "last_event_at": _max_present([e.get("at") for e in events]),
         },
         "hot_items": sum(1 for i in item_values if _jq_or(i.get("use_count"), 0) > 1),
+    }
+
+
+def _n(value):
+    # jq `tonumber? // 0`: numbers pass through (int/float preserved); numeric strings
+    # parse (whitespace-tolerant); bool / null / non-numeric string / container -> 0.
+    # Scientific-notation strings (e.g. "1e3") render differently than jq (Python json
+    # "1000.0" vs jq "1E+3") -- unreachable: economics fields are JSON numbers, not strings.
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return 0
+    return 0
+
+
+def _field_n(row, key):
+    # Bash `(.key // 0) | n`: null/false/missing -> 0, then tonumber-normalize.
+    return _n(_jq_or(row.get(key), 0))
+
+
+def _avoided_per_hit():
+    # Bash: ${KIMIFLOW_ECONOMICS_AVOIDED_TOKENS_PER_HIT:-1200} then case ''|*[!0-9]* -> 1200.
+    # Only a non-empty all-ASCII-digit value is honored (so "0" is valid; "-5"/"1.5" -> 1200).
+    raw = os.environ.get("KIMIFLOW_ECONOMICS_AVOIDED_TOKENS_PER_HIT")
+    if raw and all(c in "0123456789" for c in raw):
+        return int(raw)
+    return _DEFAULT_AVOIDED_PER_HIT
+
+
+def _economics_absent():
+    return {
+        "present": False,
+        "path": _ECONOMICS_PATH,
+        "runs_tracked": 0,
+        "confidence": "none",
+        "verdict": "no_data",
+        "action_required": False,
+        "normalized_legacy_rows": 0,
+        "by_result": {},
+        "totals": {
+            "always_on_tokens": 0,
+            "user_memory_tokens": 0,
+            "recall_tokens": 0,
+            "recall_hit_count": 0,
+            "used_hit_count": 0,
+            "estimated_avoided_scan_tokens": 0,
+            "net_estimated_tokens_saved": 0,
+        },
+        "estimated_savings_percent": None,
+        "averages": {
+            "net_estimated_tokens_saved_per_run": 0,
+            "recall_hit_count_per_run": 0,
+            "used_hit_count_per_run": 0,
+        },
+        "last_recorded_at": None,
+        "note": "No run-level memory economics recorded yet.",
+    }
+
+
+def economics_summary_json(path):
+    # Bash economics_summary_json (243-364): normalizes each MEMORY-ECONOMICS.jsonl row
+    # (recompute avoided = used * avoided_per_hit; net = avoided - always - user - recall),
+    # classifies a per-row `result`, then aggregates totals/averages/verdict/confidence.
+    if not os.path.isfile(path):
+        return _economics_absent()
+
+    avoided_per_hit = _avoided_per_hit()
+    rows = []
+    for raw in store.read_jsonl(path):
+        always = _field_n(raw, "always_on_tokens")
+        user = _field_n(raw, "user_memory_tokens")
+        recall_tokens = _field_n(raw, "recall_tokens")
+        hits = _field_n(raw, "recall_hit_count")
+        used = _field_n(raw, "used_hit_count")
+        avoided = used * avoided_per_hit
+        net = avoided - always - user - recall_tokens
+        if hits == 0:
+            result = "unknown"
+        elif used > 0 and net > 0:
+            result = "saving"
+        elif net < 0:
+            result = "waste"
+        else:
+            result = "neutral"
+        rows.append({
+            "always": always, "user": user, "recall_tokens": recall_tokens,
+            "hits": hits, "used": used, "avoided": avoided, "net": net, "result": result,
+            "raw_avoided": _field_n(raw, "estimated_avoided_scan_tokens"),
+            "raw_net": _field_n(raw, "net_estimated_tokens_saved"),
+            "recorded_at": raw.get("recorded_at"),
+        })
+
+    n = len(rows)
+    net = sum(r["net"] for r in rows)
+    hits = sum(r["hits"] for r in rows)
+    used = sum(r["used"] for r in rows)
+    avoided = sum(r["avoided"] for r in rows)
+    always = sum(r["always"] for r in rows)
+    user = sum(r["user"] for r in rows)
+    recall_tokens = sum(r["recall_tokens"] for r in rows)
+    saving = sum(1 for r in rows if r["result"] == "saving")
+    waste = sum(1 for r in rows if r["result"] == "waste")
+
+    if n == 0:
+        confidence = "none"
+    elif n < 8:
+        confidence = "low"
+    elif n < 20:
+        confidence = "medium"
+    else:
+        confidence = "high"
+
+    if n == 0:
+        verdict = "no_data"
+    elif n < 8:
+        verdict = "insufficient_data"
+    elif net > 0 and saving >= waste:
+        verdict = "saving_likely"
+    elif waste > saving or net < 0:
+        verdict = "waste_risk"
+    else:
+        verdict = "neutral"
+
+    action_required = n >= 8 and (waste > saving or net < 0)
+
+    normalized_legacy_rows = sum(
+        1 for r in rows if r["raw_avoided"] != r["avoided"] or r["raw_net"] != r["net"]
+    )
+
+    by_result = {}
+    for r in rows:
+        by_result[r["result"]] = by_result.get(r["result"], 0) + 1
+
+    if n < 8:
+        note = "Too few runs for a reliable savings claim; treat this as directional telemetry."
+    elif net > 0 and saving >= waste:
+        note = "Run telemetry suggests memory is likely saving tokens."
+    elif waste > saving or net < 0:
+        note = ("Run telemetry suggests memory may cost more than it saves; "
+                "review recall/always-on budget.")
+    else:
+        note = "Run telemetry is roughly neutral."
+
+    return {
+        "present": True,
+        "path": _ECONOMICS_PATH,
+        "runs_tracked": n,
+        "confidence": confidence,
+        "verdict": verdict,
+        "action_required": action_required,
+        "normalized_legacy_rows": normalized_legacy_rows,
+        "by_result": by_result,
+        "totals": {
+            "always_on_tokens": always,
+            "user_memory_tokens": user,
+            "recall_tokens": recall_tokens,
+            "recall_hit_count": hits,
+            "used_hit_count": used,
+            "estimated_avoided_scan_tokens": avoided,
+            "net_estimated_tokens_saved": net,
+        },
+        "estimated_savings_percent": (
+            math.floor(net * 100 / avoided) if avoided > 0 else None
+        ),
+        "averages": {
+            "net_estimated_tokens_saved_per_run": math.floor(net / n) if n > 0 else 0,
+            "recall_hit_count_per_run": math.floor(hits / n) if n > 0 else 0,
+            "used_hit_count_per_run": math.floor(used / n) if n > 0 else 0,
+        },
+        "last_recorded_at": _max_present([r["recorded_at"] for r in rows]),
+        "note": note,
     }

@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from memory_router import summaries
 
@@ -208,6 +209,122 @@ class UsageSummaryCase(_FixtureCase):
     def test_output_key_order(self):
         r = summaries.usage_summary_json(self.write_raw("e.json", "{}"))
         self.assertEqual(list(r.keys()), list(self.ABSENT.keys()))
+
+
+class EconomicsSummaryCase(_FixtureCase):
+    PATH = ".kimiflow/project/MEMORY-ECONOMICS.jsonl"
+    # Deterministic mixed fixture (default avoided_per_hit = 1200):
+    #  A: avoided=3600 net=3250 -> saving | B: avoided=1200 net=-3800 -> waste
+    #  C: all-zero hits=0 -> unknown      | D: avoided=1200 net=0 -> neutral
+    MIXED = [
+        '{"always_on_tokens":100,"user_memory_tokens":50,"recall_tokens":200,'
+        '"recall_hit_count":5,"used_hit_count":3,"recorded_at":"2026-06-10T00:00:00Z"}',
+        '{"always_on_tokens":5000,"recall_hit_count":2,"used_hit_count":1}',
+        '{"recall_hit_count":0,"used_hit_count":0}',
+        '{"always_on_tokens":1200,"recall_hit_count":3,"used_hit_count":1}',
+    ]
+
+    def econ(self, name, lines):
+        return summaries.economics_summary_json(self.write(name, lines))
+
+    def test_missing_file_absent_shape(self):
+        r = summaries.economics_summary_json(self.missing("none.jsonl"))
+        self.assertFalse(r["present"])
+        self.assertEqual(r["verdict"], "no_data")
+        self.assertEqual(r["note"], "No run-level memory economics recorded yet.")
+        self.assertEqual(list(r.keys()), [
+            "present", "path", "runs_tracked", "confidence", "verdict", "action_required",
+            "normalized_legacy_rows", "by_result", "totals", "estimated_savings_percent",
+            "averages", "last_recorded_at", "note",
+        ])
+        self.assertEqual(list(r["totals"].keys()), [
+            "always_on_tokens", "user_memory_tokens", "recall_tokens", "recall_hit_count",
+            "used_hit_count", "estimated_avoided_scan_tokens", "net_estimated_tokens_saved",
+        ])
+        self.assertEqual(list(r["averages"].keys()), [
+            "net_estimated_tokens_saved_per_run", "recall_hit_count_per_run",
+            "used_hit_count_per_run",
+        ])
+
+    def test_empty_file_present_but_zero_runs(self):
+        # Existing-but-empty file goes through the row path (present:true, n=0), and its
+        # note is the "too few runs" text -- NOT the missing-file note.
+        r = self.econ("e.jsonl", [])
+        self.assertTrue(r["present"])
+        self.assertEqual(r["runs_tracked"], 0)
+        self.assertEqual(r["verdict"], "no_data")
+        self.assertEqual(r["confidence"], "none")
+        self.assertEqual(r["estimated_savings_percent"], None)
+        self.assertTrue(r["note"].startswith("Too few runs"))
+
+    def test_mixed_classification_and_aggregates(self):
+        r = self.econ("m.jsonl", self.MIXED)
+        self.assertEqual(r["runs_tracked"], 4)
+        self.assertEqual(r["confidence"], "low")
+        self.assertEqual(r["verdict"], "insufficient_data")
+        self.assertFalse(r["action_required"])
+        self.assertEqual(list(r["by_result"].keys()), ["saving", "waste", "unknown", "neutral"])
+        self.assertEqual(r["by_result"], {"saving": 1, "waste": 1, "unknown": 1, "neutral": 1})
+        self.assertEqual(r["totals"], {
+            "always_on_tokens": 6300, "user_memory_tokens": 50, "recall_tokens": 200,
+            "recall_hit_count": 10, "used_hit_count": 5,
+            "estimated_avoided_scan_tokens": 6000, "net_estimated_tokens_saved": -550,
+        })
+        self.assertEqual(r["estimated_savings_percent"], -10)   # floor(-550*100/6000)
+        self.assertEqual(r["averages"], {
+            "net_estimated_tokens_saved_per_run": -138,   # floor(-550/4)
+            "recall_hit_count_per_run": 2,                # floor(10/4)
+            "used_hit_count_per_run": 1,                  # floor(5/4)
+        })
+        self.assertEqual(r["normalized_legacy_rows"], 3)   # A,B,D recomputed; C unchanged
+        self.assertEqual(r["last_recorded_at"], "2026-06-10T00:00:00Z")
+
+    def test_legacy_rows_counted(self):
+        r = self.econ("l.jsonl", [
+            '{"always_on_tokens":10,"used_hit_count":2,"recall_hit_count":2,'
+            '"estimated_avoided_scan_tokens":99999,"net_estimated_tokens_saved":-7}',
+        ])
+        self.assertEqual(r["normalized_legacy_rows"], 1)
+
+    def test_string_and_float_fields_normalized(self):
+        r = self.econ("s.jsonl", [
+            '{"always_on_tokens":"100","used_hit_count":"2","recall_hit_count":3,"recall_tokens":1.5}',
+        ])
+        # avoided=2*1200=2400; net=2400-100-1.5=2298.5
+        self.assertEqual(r["totals"]["always_on_tokens"], 100)
+        self.assertEqual(r["totals"]["estimated_avoided_scan_tokens"], 2400)
+        self.assertEqual(r["totals"]["net_estimated_tokens_saved"], 2298.5)
+
+    def test_malformed_lines_skipped(self):
+        r = self.econ("b.jsonl", ['{"recall_hit_count":1,"used_hit_count":1}', 'GARBAGE'])
+        self.assertEqual(r["runs_tracked"], 1)
+
+    def test_confidence_high_at_20_runs(self):
+        r = self.econ("h.jsonl", ['{"used_hit_count":5,"recall_hit_count":5,"always_on_tokens":10}'] * 20)
+        self.assertEqual(r["confidence"], "high")
+        self.assertEqual(r["verdict"], "saving_likely")
+
+    def test_waste_risk_action_required(self):
+        r = self.econ("w.jsonl", ['{"used_hit_count":1,"recall_hit_count":2,"always_on_tokens":99999}'] * 10)
+        self.assertEqual(r["verdict"], "waste_risk")
+        self.assertTrue(r["action_required"])
+
+    def test_env_override_changes_avoided(self):
+        with mock.patch.dict(os.environ, {"KIMIFLOW_ECONOMICS_AVOIDED_TOKENS_PER_HIT": "600"}):
+            r = self.econ("o.jsonl", ['{"used_hit_count":2,"recall_hit_count":2}'])
+        self.assertEqual(r["totals"]["estimated_avoided_scan_tokens"], 1200)   # 2*600
+
+    def test_env_zero_is_honored(self):
+        with mock.patch.dict(os.environ, {"KIMIFLOW_ECONOMICS_AVOIDED_TOKENS_PER_HIT": "0"}):
+            r = self.econ("z.jsonl", ['{"used_hit_count":5,"recall_hit_count":5}'])
+        self.assertEqual(r["totals"]["estimated_avoided_scan_tokens"], 0)
+        self.assertEqual(r["estimated_savings_percent"], None)   # avoided not > 0
+
+    def test_env_invalid_falls_back_to_default(self):
+        for bad in ("abc", "1.5", "-5", ""):
+            with mock.patch.dict(os.environ, {"KIMIFLOW_ECONOMICS_AVOIDED_TOKENS_PER_HIT": bad}):
+                r = self.econ("d.jsonl", ['{"used_hit_count":1,"recall_hit_count":1}'])
+            self.assertEqual(r["totals"]["estimated_avoided_scan_tokens"], 1200, bad)
 
 
 if __name__ == "__main__":

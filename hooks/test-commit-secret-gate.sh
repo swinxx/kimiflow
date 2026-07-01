@@ -74,6 +74,13 @@ assert_deny  "git add -A"          "bulk_add_-A"
 assert_deny  "git add ."           "bulk_add_dot"
 assert_deny  "git add --all"       "bulk_add_--all"
 assert_allow "git add safe.txt"    "named_add_allowed"
+# whole-tree pathspecs that the standalone-token check missed (finding C2):
+assert_deny  "git add ./"          "bulk_add_dotslash"
+assert_deny  "git add :/"          "bulk_add_colonslash_top"
+assert_deny  "git add ':(top)'"    "bulk_add_top_magic"
+assert_deny  "git add -Av"         "bulk_add_-A_cluster"
+assert_deny  "git add ./ && git commit -m wip" "bypass_add_dotslash_then_commit"
+assert_allow "git add ./src/file.ts" "named_add_dotslash_path_allowed"
 
 # --- malformed JSON: empty input is a no-op, but malformed git-like payloads fail closed ---
 out="$(printf '' | "$HOOK")"

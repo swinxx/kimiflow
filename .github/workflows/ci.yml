@@ -19,53 +19,21 @@ jobs:
             bash -n "$f"
           done
 
-      - name: Unit tests (resolve-verbosity) — hard gate
-        run: bash hooks/test-resolve-verbosity.sh
-
-      - name: Unit tests (resolve-build-gate) — hard gate
-        run: bash hooks/test-resolve-build-gate.sh
-
-      - name: Unit tests (commit-secret-gate) — hard gate
-        run: bash hooks/test-commit-secret-gate.sh
-
-      - name: Unit tests (weakening-scan) — hard gate
-        run: bash hooks/test-weakening-scan-unit.sh
-
-      - name: Unit tests (secret-content-scan) — hard gate
-        run: bash hooks/test-secret-content-scan.sh
-
-      - name: Unit tests (test-gate) — hard gate
-        run: bash hooks/test-gate-unit.sh
-
-      - name: Unit tests (state-gate) — hard gate
-        run: bash hooks/test-state-gate.sh
-
-      - name: Unit tests (launcher-status) — hard gate
-        run: bash hooks/test-launcher-status.sh
-
-      - name: Unit tests (background handles) — hard gate
-        run: bash hooks/test-background-run.sh
-
-      - name: Unit tests (working-tree-gate) — hard gate
-        run: bash hooks/test-working-tree-gate.sh
-
-      - name: Unit tests (red-green-gate) — hard gate
-        run: bash hooks/test-red-green-gate.sh
-
-      - name: Unit tests (local diagnostics) — hard gate
-        run: bash hooks/test-lsp-diagnostics.sh
-
-      - name: Unit tests (review-gate) — hard gate
-        run: bash hooks/test-resolve-review-gate.sh
-
-      - name: Unit tests (release-consistency-check) — hard gate
-        run: bash hooks/test-release-consistency-check.sh
-
-      - name: Unit tests (workqueue closeback helper) — hard gate
-        run: bash hooks/test-improvements-status.sh
-
-      - name: Unit tests (workqueue closeback nudge) — hard gate
-        run: bash hooks/test-improvements-staleness-nudge.sh
+      - name: Unit tests (every hooks/test-*.sh) — hard gate
+        run: |
+          set -e
+          # Run EVERY unit test by discovery so a newly added test can never silently
+          # skip CI (audit finding: 19 of 28 were hard-coded, so several never ran on PRs).
+          # Exclude the two PRODUCTION hooks that also match the test-* glob:
+          # test-gate.sh (Stop hook — cats stdin, evals a local marker) and
+          # test-weakening-scan.sh (Phase-7 scanner). Both have *-unit.sh tests instead.
+          for t in hooks/test-*.sh; do
+            case "$t" in
+              hooks/test-gate.sh|hooks/test-weakening-scan.sh) continue ;;
+            esac
+            echo "=== $t ==="
+            bash "$t" </dev/null
+          done
 
       - name: Validate JSON — hard gate
         run: |
@@ -91,5 +59,8 @@ jobs:
       - name: Unit tests (project-map-status) — hard gate
         run: bash hooks/test-project-map-status.sh
 
-      - name: ShellCheck (informational)
-        run: shellcheck hooks/*.sh || true
+      - name: ShellCheck (errors) — hard gate
+        run: shellcheck --severity=error hooks/*.sh
+
+      - name: ShellCheck (warnings, informational)
+        run: shellcheck --severity=warning hooks/*.sh || true

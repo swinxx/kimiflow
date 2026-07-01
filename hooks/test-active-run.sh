@@ -252,5 +252,25 @@ assert_empty "$out" "prompt_context_noops_without_active_session"
 out="$(printf '{"cwd":"%s"}' "$REPO" | "$SCRIPT" stop-gate)"
 assert_empty "$out" "stop_gate_noops_without_active_session"
 
+# --- No-jq degradation: the HOOK entrypoints must never block prompts/stops ---------
+# prompt-context (UserPromptSubmit) and stop-gate (Stop) run in EVERY repo once the
+# plugin is installed; exit 2 without jq would block+erase every user prompt. They
+# must degrade to exit 0 (like test-gate.sh and the nudges); CLI subcommands keep
+# their hard jq requirement.
+REALBASH="$(command -v bash)"
+NOJQ="$WORK/nojq-bin"; mkdir -p "$NOJQ"
+for t in bash cat grep sed head git tr dirname pwd; do
+  s="$(command -v "$t")" && [ -n "$s" ] && ln -s "$s" "$NOJQ/$t" 2>/dev/null
+done
+printf '{"cwd":"%s"}' "$REPO" | PATH="$NOJQ" "$REALBASH" "$SCRIPT" prompt-context >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 0 ] && pass "prompt_context_degrades_to_exit0_without_jq" || fail "prompt_context_degrades_to_exit0_without_jq (rc=$rc)"
+printf '{"cwd":"%s","stop_hook_active":false}' "$REPO" | PATH="$NOJQ" "$REALBASH" "$SCRIPT" stop-gate >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 0 ] && pass "stop_gate_degrades_to_exit0_without_jq" || fail "stop_gate_degrades_to_exit0_without_jq (rc=$rc)"
+PATH="$NOJQ" "$REALBASH" "$SCRIPT" status --root "$REPO" >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 2 ] && pass "cli_subcommands_still_require_jq" || fail "cli_subcommands_still_require_jq (rc=$rc)"
+
 echo "----"
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

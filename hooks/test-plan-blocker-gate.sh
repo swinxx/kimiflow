@@ -231,5 +231,58 @@ EOF
 out="$(run_gate)"
 assert_field "$out" 2 OPEN "extensionless_project_file_path_opens"
 
+# --- Audit-mode profile (finding C1: audit runs carry AUDIT-INTENT.md + AUDIT.md, not
+# PLAN.md/ACCEPTANCE.md; the gate must not hard-require plan artifacts or it deadlocks) ---
+reset_audit() {
+  rm -rf "$WORK"; mkdir -p "$RUN"
+  cat > "$RUN/STATE.md" <<'EOF'
+Status: active
+Mode: audit
+Scope: small
+Affected files: src/legacy.ts
+Phase 4: open
+EOF
+  cat > "$RUN/AUDIT-INTENT.md" <<'EOF'
+# Audit intent
+<!-- kimiflow:clarify-evidence mode=questions count=2 confirmed=yes source=current-run -->
+Remove dead code under src/legacy.ts; preserve behavior.
+EOF
+  cat > "$RUN/AUDIT.md" <<'EOF'
+# Audit
+## Slice 1: delete unused helper (~-40 lines)
+- delete src/legacy.ts:88 oldHelper() — grep `oldHelper` repo-wide returns 0 callers.
+## Do NOT touch
+- src/legacy.ts:12 publicApi() — exported.
+EOF
+}
+
+reset_audit
+out="$(run_gate)"
+assert_field "$out" 2 OPEN "audit_mode_opens_without_plan_acceptance"
+
+# Audit without AUDIT.md → still blocked (understanding missing)
+reset_audit; rm -f "$RUN/AUDIT.md"
+out="$(run_gate)"
+assert_field "$out" 2 CLOSED "audit_mode_without_audit_md_blocks"
+
+# Audit AUDIT.md without any path evidence → blocked
+reset_audit
+cat > "$RUN/AUDIT.md" <<'EOF'
+# Audit
+## Slice 1
+- remove some old stuff that nobody uses anymore.
+EOF
+out="$(run_gate)"
+assert_field "$out" 2 CLOSED "audit_mode_without_path_evidence_blocks"
+
+# Audit with a skipped micro-grill (clarify marker absent) → blocked by clarify recheck
+reset_audit
+cat > "$RUN/AUDIT-INTENT.md" <<'EOF'
+# Audit intent
+Remove dead code under src/legacy.ts; preserve behavior.
+EOF
+out="$(run_gate)"
+assert_field "$out" 2 CLOSED "audit_mode_skipped_grill_blocks"
+
 echo "----"
 if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

@@ -133,8 +133,13 @@ if git_sub add; then
   add_args="$(printf '%s' "$cmd" \
     | grep -oE "(^|[;&|][[:space:]]*)git( +-[Cc] +[^ ]+| +-[^ ]+)* +add( +[^;&|]+)+" \
     | sed -E 's/.*[[:space:]]add[[:space:]]+//' || true)"
-  if printf '%s' "$add_args" | grep -qE '(^|[[:space:]])(-A|--all|\.)([[:space:]]|$)'; then
-    emit_deny "kimiflow commit-secret-gate: refusing 'git add -A/.' — stage only explicitly named paths (commit hygiene). Add the files you mean by name."
+  # Strip surrounding quotes so a quoted whole-tree magic pathspec (e.g. `git add ':(top)'`) is
+  # still seen. Safe: this branch reads only bulk flags/whole-tree pathspecs, never a real filename,
+  # so removing quotes can't drop a path we needed. Deny bulk flags (-A/-Av/--all) AND whole-tree
+  # pathspecs the old standalone-`.` check missed: `.` `./` `.\` `:/` `:(top…` (all stage the tree).
+  add_args_clean="$(printf '%s' "$add_args" | tr -d "\"'")"
+  if printf '%s' "$add_args_clean" | grep -qE '(^|[[:space:]])(-A[A-Za-z]*|--all|\.|\./|\.\\|:/|:\(top[,)])([[:space:]]|$)'; then
+    emit_deny "kimiflow commit-secret-gate: refusing bulk 'git add' (-A/./:/ whole-tree) — stage only explicitly named paths (commit hygiene). Add the files you mean by name."
   fi
 fi
 

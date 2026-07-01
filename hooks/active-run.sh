@@ -835,7 +835,9 @@ hook_root_from_input() {
 }
 
 cmd_prompt_context() {
-  need_jq
+  # Hook entrypoint (UserPromptSubmit): runs in EVERY repo once installed. Without jq,
+  # degrade to exit 0 — exit 2 here would block+erase every user prompt everywhere.
+  command -v jq >/dev/null 2>&1 || exit 0
   local input root status present context stale run open
   input="$(cat 2>/dev/null || true)"
   root="$(hook_root_from_input "$input")"
@@ -861,7 +863,9 @@ cmd_prompt_context() {
 }
 
 cmd_stop_gate() {
-  need_jq
+  # Hook entrypoint (Stop): degrade to exit 0 without jq — exit 2 here would re-block
+  # every Stop with the documented stop_hook_active loop-break unreachable.
+  command -v jq >/dev/null 2>&1 || exit 0
   local input active root status run open stale reason
   input="$(cat 2>/dev/null || true)"
   active="$(printf '%s' "$input" | jq -r '.stop_hook_active // .hook_input.stop_hook_active // false' 2>/dev/null || true)"

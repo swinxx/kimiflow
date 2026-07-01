@@ -45,6 +45,25 @@ find_first() {
 intent="$(find_first INTENT.md PROBLEM.md AUDIT-INTENT.md 2>/dev/null || true)"
 understanding="$(find_first RESEARCH.md DIAGNOSIS.md AUDIT.md 2>/dev/null || true)"
 
+# Audit runs carry AUDIT-INTENT.md + AUDIT.md (slices), not PLAN.md/ACCEPTANCE.md. Detect the
+# audit profile so the executable-plan checks below don't hard-require plan artifacts (deadlock).
+state_value() {
+  local key="$1"
+  [ -f "$state" ] || return 0
+  awk -v key="$key" '
+    { line=$0; gsub(/\r/,"",line); gsub(/\*\*/,"",line); sub(/^[[:space:]]*-[[:space:]]*/,"",line)
+      if (tolower(line) ~ "^" key "[[:space:]]*:") { sub(/^[^:]*:[[:space:]]*/,"",line); print line; exit } }
+  ' "$state"
+}
+mode_value="$(state_value mode | tr '[:upper:]' '[:lower:]')"
+alias_value="$(state_value alias | tr '[:upper:]' '[:lower:]')"
+audit_mode=0
+if printf '%s\n%s\n' "$mode_value" "$alias_value" | grep -Eiq '(^|[^a-z])audit([^a-z]|$)'; then
+  audit_mode=1
+elif [ -f "$run_dir/AUDIT-INTENT.md" ] && [ ! -f "$plan" ]; then
+  audit_mode=1
+fi
+
 blockers=0
 details=""
 add_blocker() {
@@ -109,8 +128,10 @@ require_file() {
 require_file "$state" state_missing >/dev/null || true
 require_file "$intent" intent_missing >/dev/null || true
 require_file "$understanding" understanding_missing >/dev/null || true
-require_file "$plan" plan_missing >/dev/null || true
-require_file "$acceptance" acceptance_missing >/dev/null || true
+if [ "$audit_mode" -eq 0 ]; then
+  require_file "$plan" plan_missing >/dev/null || true
+  require_file "$acceptance" acceptance_missing >/dev/null || true
+fi
 
 clarify_gate="$SCRIPT_DIR/clarify-gate.sh"
 if [ -x "$clarify_gate" ]; then
@@ -171,15 +192,29 @@ EOF
   fi
 fi
 
-if [ -f "$plan" ] || [ -f "$acceptance" ]; then
-  if ! file_has_path_evidence "$plan" && ! file_has_path_evidence "$acceptance"; then
-    add_blocker "no_code_or_artifact_path_evidence"
+if [ "$audit_mode" -eq 1 ]; then
+  # Audit profile: AUDIT.md (understanding) must have no unresolved markers, carry slice
+  # path:line evidence, and either it or STATE.md must declare the affected paths.
+  if [ -f "$understanding" ]; then
+    if grep -Eiq '\b(TBD|TODO|FIXME|NEEDS CLARIFICATION|OPEN QUESTION|NOT VERIFIED|UNKNOWN)\b' "$understanding"; then
+      add_blocker "audit_contains_unresolved_marker"
+    fi
+    file_has_path_evidence "$understanding" || add_blocker "audit_slices_no_path_evidence"
   fi
-fi
-
-if [ -f "$state" ]; then
-  if ! file_declares_affected_paths "$state" && ! file_declares_affected_paths "$plan"; then
+  if ! file_declares_affected_paths "$state" && ! file_declares_affected_paths "$understanding"; then
     add_blocker "affected_files_not_declared"
+  fi
+else
+  if [ -f "$plan" ] || [ -f "$acceptance" ]; then
+    if ! file_has_path_evidence "$plan" && ! file_has_path_evidence "$acceptance"; then
+      add_blocker "no_code_or_artifact_path_evidence"
+    fi
+  fi
+
+  if [ -f "$state" ]; then
+    if ! file_declares_affected_paths "$state" && ! file_declares_affected_paths "$plan"; then
+      add_blocker "affected_files_not_declared"
+    fi
   fi
 fi
 

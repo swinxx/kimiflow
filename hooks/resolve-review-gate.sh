@@ -28,6 +28,31 @@ case "$round" in ''|*[!0-9]*) emit CLOSED - malformed "bad-or-missing --round" ;
 case "$cap"   in ''|*[!0-9]*) emit CLOSED - malformed "bad --cap" ;; esac
 [ -n "$dir" ]    || emit CLOSED - malformed "missing findings-dir"
 [ -n "$expect" ] || emit CLOSED - malformed "missing --expect"
+# Normalize base-10 so a zero-padded round (e.g. 08) can't trip octal arithmetic later.
+round=$((10#$round)); cap=$((10#$cap))
+
+# List existing findings files for the --expect lens set at a given round (newline-delimited).
+# Phase 4 (lenses A/B) and Phase 7 (code-verified) share the findings dir with overlapping
+# round numbers; every cross-round check MUST be scoped to --expect, never a bare r<N>-*.md glob.
+expected_round_files() {
+  local rnum="$1" lens f OLDIFS
+  OLDIFS="$IFS"; IFS=','; set -- $expect; IFS="$OLDIFS"
+  for lens in "$@"; do
+    f="$dir/r${rnum}-${lens}.md"
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done
+}
+# True (return 0) iff <id> appears as an open/any FINDING line in any --expect file of <round>.
+id_in_round() {
+  local target="$1" rnum="$2" f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qF "FINDING $target :: " "$f" 2>/dev/null && return 0
+  done <<EOF
+$(expected_round_files "$rnum")
+EOF
+  return 1
+}
 
 FINDING_RE='^FINDING (BLOCKER|HIGH|MEDIUM|LOW) .+ :: .+$'
 
@@ -62,21 +87,27 @@ done
 [ "$round" -ge "$cap" ] && emit CLOSED "$open_count" cap-reached "round ${round} >= cap ${cap}"
 
 prev=$((round - 1))
+prev_files="$(expected_round_files "$prev")"
 prev_exists=false
-for pf in "$dir"/r${prev}-*.md; do [ -e "$pf" ] && { prev_exists=true; break; }; done
+[ -n "$prev_files" ] && prev_exists=true
 
 if [ "$prev" -ge 1 ] && [ "$prev_exists" = true ]; then
-  prev_open="$(grep -hE '^FINDING (BLOCKER|HIGH) ' "$dir"/r${prev}-*.md 2>/dev/null | grep -c '' )"
+  prev_open=0
+  while IFS= read -r pf; do
+    [ -n "$pf" ] || continue
+    n="$(grep -cE '^FINDING (BLOCKER|HIGH) ' "$pf" 2>/dev/null || true)"
+    prev_open=$((prev_open + n))
+  done <<EOF
+$prev_files
+EOF
   [ "$open_count" -ge "$prev_open" ] && emit CLOSED "$open_count" oscillation "${prev_open}->${open_count}"
   if [ "$prev" -ge 2 ]; then
     while IFS= read -r id; do
       [ -n "$id" ] || continue
-      grep -qF "FINDING $id :: " "$dir"/r${prev}-*.md 2>/dev/null && continue
+      id_in_round "$id" "$prev" && continue
       k=1
       while [ "$k" -le $((prev - 1)) ]; do
-        if grep -qF "FINDING $id :: " "$dir"/r${k}-*.md 2>/dev/null; then
-          emit CLOSED "$open_count" reappeared "$id"
-        fi
+        id_in_round "$id" "$k" && emit CLOSED "$open_count" reappeared "$id"
         k=$((k + 1))
       done
     done <<EOF

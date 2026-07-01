@@ -96,4 +96,20 @@ reset
 put r2-B.md "FINDING HIGH src/a:1 :: x"
 af "$(run --round 2 --expect B)" 3 open-findings "degrade_no_prior"
 
+# cross-phase isolation (audit finding C8): Phase 4 (lenses A/B) and Phase 7 (code-verified)
+# share the findings dir with overlapping round numbers. The anti-oscillation prev-round
+# check MUST be scoped to the --expect lens set, else stale Phase-4 findings inflate
+# prev_open and a genuine Phase-7 1->1 stagnation is mis-emitted as open-findings.
+reset
+put r1-A.md "FINDING HIGH plan:3 :: p"
+put r1-B.md "FINDING HIGH plan:5 :: q"
+put r1-code-verified.md "FINDING HIGH src/a:9 :: z"
+put r2-code-verified.md "FINDING HIGH src/a:9 :: z"
+af "$(run --round 2 --expect code-verified)" 3 oscillation "cross_phase_isolation_oscillation"
+
+# zero-padded round must still emit a verdict line (fail-closed), never crash unbound
+reset
+put r1-B.md "FINDING HIGH src/a:1 :: x"
+out="$(run --round 08 --expect B --cap 10)"; af "$out" 1 CLOSED "zeropad_round_has_verdict"
+
 echo "----"; if [ "$FAILS" -eq 0 ]; then echo "ALL GREEN"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

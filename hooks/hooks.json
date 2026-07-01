@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/active-run.sh prompt-context"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/active-run.sh prompt-context"
           }
         ]
       }
@@ -16,11 +16,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/commit-secret-gate.sh"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/commit-secret-gate.sh"
           },
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/state-gate.sh"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/state-gate.sh"
           }
         ]
       }
@@ -30,19 +30,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/test-gate.sh"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/test-gate.sh"
           },
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/active-run.sh stop-gate"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/active-run.sh stop-gate"
           },
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/map-staleness-nudge.sh"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/map-staleness-nudge.sh"
           },
           {
             "type": "command",
-            "command": "${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/improvements-staleness-nudge.sh"
+            "command": "\"${KIMIFLOW_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}\"/hooks/improvements-staleness-nudge.sh"
           }
         ]
       }

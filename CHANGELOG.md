@@ -4,7 +4,21 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 ## Unreleased
 
-_No unreleased changes._
+Audit-hardening: a 7-lens adversarial baseline audit of the flow prose, the hook layer, and the memory-router Python package; every confirmed finding fixed test-first.
+
+### Fixed
+- **Hook manifests quote `${KIMIFLOW_PLUGIN_ROOT}` expansions** (`hooks/hooks.json`, Codex `hooks.json`): an install path containing spaces word-split the hook commands (exit 126/127), silently **failing open** every PreToolUse gate. New `hooks/test-hooks-json.sh` runs each manifest command from a spaced plugin root.
+- **`active-run.sh` no longer blocks every prompt when `jq` is missing:** the `prompt-context`/`stop-gate` entry points degraded from exit 2 (which froze all sessions in all repos) to exit 0 (context/nudge skipped); CLI subcommands still require jq.
+- **`plan-blocker-gate.sh` audit-mode deadlock:** audit runs never produce PLAN/ACCEPTANCE, but the gate demanded them. An audit profile (mode from STATE.md, fallback AUDIT-INTENT ∧ ¬PLAN) now requires AUDIT.md path evidence + affected paths + clarify recheck instead.
+- **`resolve-review-gate.sh` cross-phase isolation:** anti-oscillation/reappeared checks globbed `r<N>-*.md` across ALL lenses, so Phase-4 leftovers masked genuine Phase-7 oscillation (a mandatory stop was suppressed). Previous-round checks are now `--expect`-scoped; `round`/`cap` are base-10-normalized (no octal crash on `08`).
+- **`commit-secret-gate.sh` bulk-add bypasses closed:** `git add ./`, `git add :/`, and `:(top)` pathspecs (whole-tree synonyms) now hit the bulk-stage block, including `-A` flag clusters and quoted forms.
+- **memory-router path traversal (`rows.py`):** `../`-evidence refs escaped the repo-root check, so out-of-repo files (e.g. `/etc/hosts`) were hashed into `evidence_fingerprints`. Paths are now lexically normalized before the root check; escaping refs map to `OUTSIDE_REPO` (spec §12).
+- **memory-router rewrite data loss (`writes.py`/`store.py`):** the status=current full-rewrite dropped blank/malformed lines from `LEARNINGS.jsonl` that the append path preserved. The rewrite now keeps unparseable lines verbatim, in place (spec §12).
+- **memory-router security-gate scope (`writes.py`/`rows.py`):** the gate scanned only `summary` — injection phrases or hidden unicode in `topic`/`evidence` passed through, and bare secret values kept `sensitivity=normal`, making such rows vault-sync candidates. The gate now scans summary+topic+evidence (newline-joined, no cross-field matches), and a minimal secret-value pattern class (AWS key ids, PEM headers, GitHub/Slack tokens, long `key=value` literals) forces `sensitivity=security` — recorded locally, quarantined from sync (spec §12).
+
+### Changed
+- **Flow-prose coherence fixes** (SKILL.md, reference.md): the `full` alias forces the pre-build approval stop even with `build-gate off`; Phase 7 stages named paths *before* the advisory scans (they previously read an empty staged diff); the Phase-5 resume path runs through the working-tree gate (own reference section); the Phase-5 red-test commit is the single defined exception to the commit-hygiene rule; best-of-2 candidate failure degrades to best-of-1 (the implementer seat never substitutes same-family); audit-mode reviewers receive `AUDIT-INTENT.md` + `AUDIT.md`; `quick` is defined as one `bug-regression` lens + advisory scans; phantom "split promoted files" wording removed and Current-State Pulse/Gate pointers aligned.
+- **CI test discovery** (`.github/workflows/ci.yml`): the 19 hard-coded test steps are replaced by a discovery loop over all `hooks/test-*.sh` (production hooks excluded), so new suites gate CI automatically; `shellcheck --severity=error` is a hard gate.
 
 ## 0.1.55
 

@@ -6,6 +6,10 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 
 _No unreleased changes._
 
+## 0.1.55
+
+Ship **calm launcher status UX**.
+
 ## 0.1.54
 
 

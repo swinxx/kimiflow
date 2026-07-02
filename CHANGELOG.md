@@ -18,6 +18,7 @@ Audit-hardening: a 7-lens adversarial baseline audit of the flow prose, the hook
 - **memory-router security-gate scope (`writes.py`/`rows.py`):** the gate scanned only `summary` — injection phrases or hidden unicode in `topic`/`evidence` passed through, and bare secret values kept `sensitivity=normal`, making such rows vault-sync candidates. The gate now scans summary+topic+evidence (newline-joined, no cross-field matches), and a minimal secret-value pattern class (AWS key ids, PEM headers, GitHub/Slack tokens, long `key=value` literals) forces `sensitivity=security` — recorded locally, quarantined from sync (spec §12).
 
 ### Added
+- **`kimiflow_core` R1 foundation:** added the stdlib Python package skeleton, shared contracts/path/state/atomic helpers, unit wrapper, old-vs-new parity harness, and divergence-ledger spec for the large-script rebuild before any production shim cutover.
 - **`launcher-status.sh --full`; the default output is now the compact first screen.** Without the flag, the heavy arrays (`runs.items` — 13K+ chars on run-heavy repos — and `background.items`) and the full `memory` object are omitted; all counts, `memory_summary`, `maintenance`, and the `.launcher` block are unchanged. The snapshot is still computed in full — the trim is serialization-only, so maintenance reasons and the `.launcher` status stay byte-identical. Drilldown prose in `reference.md` points at `--full`.
 
 ### Changed

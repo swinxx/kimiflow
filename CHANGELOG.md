@@ -7,6 +7,7 @@ Notable changes to **kimiflow**. Versions track `.claude-plugin/plugin.json`.
 Audit-hardening: a 7-lens adversarial baseline audit of the flow prose, the hook layer, and the memory-router Python package; every confirmed finding fixed test-first.
 
 ### Fixed
+- **Phase-read driver deadlock:** post-R2 runs auto-enable `phase_reads_required`, but the always-loaded workflow did not tell the orchestrator to write `PHASE-READS.json` before `clarify-gate`, `plan-blocker-gate`, or `finish`. `SKILL.md` and `reference.md` now name the `active-run.sh phase-read ... --write` path and the phase boundaries it must satisfy.
 - **Hook manifests quote `${KIMIFLOW_PLUGIN_ROOT}` expansions** (`hooks/hooks.json`, Codex `hooks.json`): an install path containing spaces word-split the hook commands (exit 126/127), silently **failing open** every PreToolUse gate. New `hooks/test-hooks-json.sh` runs each manifest command from a spaced plugin root.
 - **`active-run.sh` no longer blocks every prompt when `jq` is missing:** the `prompt-context`/`stop-gate` entry points degraded from exit 2 (which froze all sessions in all repos) to exit 0 (context/nudge skipped); CLI subcommands still require jq.
 - **`plan-blocker-gate.sh` audit-mode deadlock:** audit runs never produce PLAN/ACCEPTANCE, but the gate demanded them. An audit profile (mode from STATE.md, fallback AUDIT-INTENT ∧ ¬PLAN) now requires AUDIT.md path evidence + affected paths + clarify recheck instead.

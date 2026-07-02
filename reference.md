@@ -209,6 +209,9 @@ Commands:
 ```bash
 hooks/active-run.sh status --pretty
 hooks/active-run.sh start --run .kimiflow/<slug> --mode feature --scope small --write
+hooks/active-run.sh phase-read --run .kimiflow/<slug> --phase 0 --file phases/phase-0-setup.md --write
+hooks/active-run.sh phase-read-status --run .kimiflow/<slug> --json
+hooks/active-run.sh phase-read-gate --run .kimiflow/<slug> --through-phase 4
 hooks/active-run.sh append-item --title "..." --kind feature --write
 hooks/active-run.sh mark-built --id item_001 --write
 hooks/active-run.sh mark-accepted --id item_001 --write
@@ -220,6 +223,11 @@ hooks/active-run.sh park --reason "waiting for user validation" --write
 hooks/active-run.sh fail --reason "verification failed" --write
 hooks/active-run.sh abort --reason "user switched workflow" --write
 ```
+
+Post-R2 runs may return `phase_reads_required: true` from `start`/`status`. For those runs, the orchestrator reads
+the phase file named in `phases/PHASES.json` on entry to each phase and records it with `phase-read --write` before
+the next boundary that checks it: clarify checks through Phase 1, plan-blocker through Phase 4, and `finish` through
+Phase 7. Legacy runs without the marker stay open on the phase-read gate.
 
 **Prompt behavior:** the `UserPromptSubmit` hook calls `active-run.sh prompt-context`. When an active session
 exists, it injects a small reminder into the next model turn: keep the follow-up request inside Kimiflow unless

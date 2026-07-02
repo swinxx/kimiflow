@@ -12,6 +12,8 @@
 # deserve an expensive reviewer round.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=hooks/kimiflow-lib.sh
+. "$SCRIPT_DIR/kimiflow-lib.sh"
 
 emit() {
   printf 'PLAN_BLOCKER_GATE\t%s\tblockers=%s\treason=%s\tdetail=%s\n' "$1" "$2" "$3" "${4:-}"
@@ -47,16 +49,8 @@ understanding="$(find_first RESEARCH.md DIAGNOSIS.md AUDIT.md 2>/dev/null || tru
 
 # Audit runs carry AUDIT-INTENT.md + AUDIT.md (slices), not PLAN.md/ACCEPTANCE.md. Detect the
 # audit profile so the executable-plan checks below don't hard-require plan artifacts (deadlock).
-state_value() {
-  local key="$1"
-  [ -f "$state" ] || return 0
-  awk -v key="$key" '
-    { line=$0; gsub(/\r/,"",line); gsub(/\*\*/,"",line); sub(/^[[:space:]]*-[[:space:]]*/,"",line)
-      if (tolower(line) ~ "^" key "[[:space:]]*:") { sub(/^[^:]*:[[:space:]]*/,"",line); print line; exit } }
-  ' "$state"
-}
-mode_value="$(state_value mode | tr '[:upper:]' '[:lower:]')"
-alias_value="$(state_value alias | tr '[:upper:]' '[:lower:]')"
+mode_value="$(kimiflow_state_value "$state" mode | tr '[:upper:]' '[:lower:]')"
+alias_value="$(kimiflow_state_value "$state" alias | tr '[:upper:]' '[:lower:]')"
 audit_mode=0
 if printf '%s\n%s\n' "$mode_value" "$alias_value" | grep -Eiq '(^|[^a-z])audit([^a-z]|$)'; then
   audit_mode=1

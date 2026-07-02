@@ -3,6 +3,7 @@
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/agentic-readiness.sh"
+LIB="$(cd "$(dirname "$0")" && pwd)/kimiflow-lib.sh"
 ACTIVE_RUN="$(cd "$(dirname "$0")" && pwd)/active-run.sh"
 BACKGROUND_RUN="$(cd "$(dirname "$0")" && pwd)/background-run.sh"
 WORK="$(mktemp -d)"
@@ -201,6 +202,7 @@ out="$(run_status)"
 assert_jq "$out" '.provider.mcp_ready == false and .provider.direct_search_ready == false and .provider.direct_write_ready == false and (.readiness.warnings | index("mcp_not_direct_ready"))' "mcp_requires_authenticated_tools"
 mkdir -p "$WORK/fake-hooks"
 cp "$SCRIPT" "$WORK/fake-hooks/agentic-readiness.sh"
+cp "$LIB" "$WORK/fake-hooks/kimiflow-lib.sh"
 out="$(KIMIFLOW_HOST=codex "$WORK/fake-hooks/agentic-readiness.sh" status --root "$REPO" --run .kimiflow/demo)"
 assert_jq "$out" '.hooks.ready == false and (.readiness.blockers | index("required_helpers_missing"))' "capability_detection_is_structural"
 

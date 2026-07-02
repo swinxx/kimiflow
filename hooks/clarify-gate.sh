@@ -11,6 +11,9 @@
 # 2+ targeted questions OR confirmed a compact set of recommended assumptions
 # in the current Kimiflow run. Loose prior conversation is context, not consent.
 set -u
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=hooks/kimiflow-lib.sh
+. "$SCRIPT_DIR/kimiflow-lib.sh"
 
 emit() {
   printf 'CLARIFY_GATE\t%s\tblockers=%s\treason=%s\tdetail=%s\n' "$1" "$2" "$3" "${4:-}"
@@ -39,26 +42,6 @@ find_first() {
   return 1
 }
 
-state_value() {
-  local key="$1"
-  [ -f "$state" ] || return 0
-  awk -v key="$key" '
-    {
-      line = $0
-      gsub(/\r/, "", line)
-      gsub(/\*\*/, "", line)
-      sub(/^[[:space:]]*-[[:space:]]*/, "", line)
-      lower = tolower(line)
-      pattern = "^" key "[[:space:]]*:"
-      if (lower ~ pattern) {
-        sub(/^[^:]*:[[:space:]]*/, "", line)
-        print line
-        exit
-      }
-    }
-  ' "$state"
-}
-
 blockers=0
 details=""
 add_blocker() {
@@ -67,9 +50,9 @@ add_blocker() {
 }
 
 artifact="$(find_first INTENT.md PROBLEM.md AUDIT-INTENT.md 2>/dev/null || true)"
-scope="$(state_value scope | tr '[:upper:]' '[:lower:]' | awk '{print $1}')"
-alias_value="$(state_value alias | tr '[:upper:]' '[:lower:]')"
-mode_value="$(state_value mode | tr '[:upper:]' '[:lower:]')"
+scope="$(kimiflow_state_value "$state" scope | tr '[:upper:]' '[:lower:]' | awk '{print $1}')"
+alias_value="$(kimiflow_state_value "$state" alias | tr '[:upper:]' '[:lower:]')"
+mode_value="$(kimiflow_state_value "$state" mode | tr '[:upper:]' '[:lower:]')"
 
 if [ "$scope" = "trivial" ]; then
   emit OPEN 0 clean ""

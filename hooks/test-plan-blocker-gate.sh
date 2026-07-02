@@ -3,6 +3,7 @@
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/plan-blocker-gate.sh"
+LIB="$(cd "$(dirname "$0")" && pwd)/kimiflow-lib.sh"
 WORK="$(mktemp -d)"
 RUN="$WORK/.kimiflow/demo"
 FAILS=0
@@ -99,6 +100,7 @@ reset_run
 FAKE_HOOKS="$WORK/fake-hooks"
 mkdir -p "$FAKE_HOOKS"
 cp "$SCRIPT" "$FAKE_HOOKS/plan-blocker-gate.sh"
+cp "$LIB" "$FAKE_HOOKS/kimiflow-lib.sh"
 cat > "$FAKE_HOOKS/clarify-gate.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'not a gate verdict\n'
@@ -112,6 +114,7 @@ reset_run
 FAKE_HOOKS="$WORK/fake-hooks-error"
 mkdir -p "$FAKE_HOOKS"
 cp "$SCRIPT" "$FAKE_HOOKS/plan-blocker-gate.sh"
+cp "$LIB" "$FAKE_HOOKS/kimiflow-lib.sh"
 cat > "$FAKE_HOOKS/clarify-gate.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 2

@@ -151,6 +151,41 @@ EOF
   }' > "$repo/.kimiflow/session/ACTIVE_RUN.json"
 }
 
+write_gate_fixture() {
+  local repo="$1" run
+  run="$repo/.kimiflow/demo"
+  mkdir -p "$run"
+  cat > "$run/STATE.md" <<'EOF'
+- **Status:** active
+- **Mode:** feature
+- **Alias:** quick
+- **Scope:** small
+- **Affected files:**
+  - hooks/a.sh
+- **Phase 0:** done
+- **Phase 1:** done
+EOF
+  cat > "$run/INTENT.md" <<'EOF'
+# Intent
+<!-- kimiflow:clarify-evidence mode=questions count=2 confirmed=yes source=current-run -->
+Build a small fixture against hooks/a.sh.
+EOF
+  cat > "$run/RESEARCH.md" <<'EOF'
+# Research
+The fixture touches hooks/a.sh:1.
+EOF
+  cat > "$run/PLAN.md" <<'EOF'
+# Plan
+Affected files:
+- hooks/a.sh
+- Update hooks/a.sh for AC-1.
+EOF
+  cat > "$run/ACCEPTANCE.md" <<'EOF'
+# Acceptance
+- AC-1 -> shell_smoke: verify hooks/a.sh behavior.
+EOF
+}
+
 FAILS=0
 ok() { printf 'ok   %s\n' "$1"; }
 bad() { printf 'BAD  %s\n' "$1"; FAILS=$((FAILS + 1)); }
@@ -244,6 +279,10 @@ run_one() {
       write_active_fixture "$case_old"
       write_active_fixture "$case_new"
       ;;
+    clarify_markdown_state|plan_blocker_markdown_state)
+      write_gate_fixture "$case_old"
+      write_gate_fixture "$case_new"
+      ;;
   esac
 
   old_args=()
@@ -252,6 +291,9 @@ run_one() {
     if [ "$arg" = "__REPO__" ]; then
       old_args+=("$case_old")
       new_args+=("$case_new")
+    elif [ "$arg" = "__RUN__" ]; then
+      old_args+=("$case_old/.kimiflow/demo")
+      new_args+=("$case_new/.kimiflow/demo")
     else
       old_args+=("$arg")
       new_args+=("$arg")
@@ -345,7 +387,9 @@ CASES=(
   "launcher_pretty::launcher-status.sh::--root|__REPO__|--pretty"
   "launcher_stale_plugin_cache::launcher-status.sh::--root|__REPO__"
   "clarify_missing_dir::clarify-gate.sh::$WORK/missing-run"
+  "clarify_markdown_state::clarify-gate.sh::__RUN__"
   "plan_blocker_missing_dir::plan-blocker-gate.sh::$WORK/missing-run"
+  "plan_blocker_markdown_state::plan-blocker-gate.sh::__RUN__"
   "agentic_status_repo::agentic-readiness.sh::status|--root|$REPO"
 )
 

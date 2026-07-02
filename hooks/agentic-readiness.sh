@@ -8,6 +8,8 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=hooks/kimiflow-lib.sh
+. "$SCRIPT_DIR/kimiflow-lib.sh"
 PACKET_MAX_BYTES="${KIMIFLOW_AGENTIC_PACKET_MAX_BYTES:-12000}"
 
 usage() {
@@ -29,11 +31,7 @@ iso_now() {
 
 resolve_root() {
   local root="$1"
-  if [ -n "$root" ]; then
-    (cd "$root" 2>/dev/null && pwd -P) || die "cannot resolve root: $root" 2
-  else
-    git rev-parse --show-toplevel 2>/dev/null || pwd -P
-  fi
+  kimiflow_resolve_root "$root" || die "cannot resolve root: $root" 2
 }
 
 level_rank() {

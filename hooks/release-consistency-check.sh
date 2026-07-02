@@ -58,9 +58,10 @@ check_max_bytes() {
 
 check_output_bytes() {
   local label="$1" max="$2"; shift 2
-  local out bytes
-  if out="$("$@" 2>/dev/null)"; then
-    bytes="$(printf '%s' "$out" | wc -c | tr -d '[:space:]')"
+  local out_file bytes
+  out_file="$(mktemp)"
+  if "$@" >"$out_file" 2>/dev/null; then
+    bytes="$(wc -c < "$out_file" | tr -d '[:space:]')"
     if [ "$bytes" -le "$max" ]; then
       say "  ok    $label bytes ($bytes <= $max)"
     else
@@ -71,6 +72,7 @@ check_output_bytes() {
     say "  FAIL  $label byte budget command failed"
     fails=$((fails+1))
   fi
+  rm -f "$out_file"
 }
 
 sot_file="$ROOT/.claude-plugin/plugin.json"
@@ -160,9 +162,18 @@ launcher="$ROOT/hooks/launcher-status.sh"
 if [ -x "$launcher" ]; then
   budget_tmp="$(mktemp -d)"
   trap 'rm -rf "$budget_tmp"' EXIT
-  git -C "$budget_tmp" init -q
-  check_output_bytes "launcher-status default output" 8000 "$launcher" --root "$budget_tmp"
-  check_output_bytes "launcher-status --pretty output" 12000 "$launcher" --root "$budget_tmp" --pretty
+  budget_repo="$budget_tmp/repo"
+  budget_home="$budget_tmp/home"
+  mkdir -p "$budget_repo" "$budget_home"
+  git -C "$budget_repo" init -q
+  check_output_bytes "launcher-status default output" 8000 \
+    env -i "PATH=${PATH:-/usr/bin:/bin}" "HOME=$budget_home" "KIMIFLOW_HOME=$budget_home" \
+      "KIMIFLOW_GLOBAL_METRICS=on" "KIMIFLOW_PLUGIN_ROOT=$ROOT" \
+      "$launcher" --root "$budget_repo"
+  check_output_bytes "launcher-status --pretty output" 12000 \
+    env -i "PATH=${PATH:-/usr/bin:/bin}" "HOME=$budget_home" "KIMIFLOW_HOME=$budget_home" \
+      "KIMIFLOW_GLOBAL_METRICS=on" "KIMIFLOW_PLUGIN_ROOT=$ROOT" \
+      "$launcher" --root "$budget_repo" --pretty
 else
   say "  skip  launcher-status output byte budgets (script absent)"
 fi

@@ -33,6 +33,12 @@ make_render_fixture() {
   git -C "$d" add .
 }
 
+make_launcher_fixture() {
+  local d="$1" v="$2"
+  make_fixture "$d" "$v"
+  mkdir -p "$d/hooks"
+}
+
 run() { OUT="$("$SCRIPT" --root "$1" 2>&1)"; RC=$?; }
 
 # AC-1.1 consistent fixture passes
@@ -124,6 +130,34 @@ awk 'BEGIN{for(i=0;i<20001;i++) printf "x"}' > "$F/phases/phase-0-setup.md"
 run "$F"
 { [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -qF 'phases/phase-0-setup.md phase prose bytes'; } \
   && pass "phase_budget_oversize_detected" || fail "phase_budget_oversize_detected: rc=$RC :: $OUT"
+
+# AC-4.1 launcher budget fixture must not inherit caller KIMIFLOW_HOME/HOME content
+F="$TMP/c10"; make_launcher_fixture "$F" "0.1.0"
+cat > "$F/hooks/launcher-status.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ -n "${KIMIFLOW_HOME:-}" ] && [ -f "$KIMIFLOW_HOME/metrics/token-economics.jsonl" ]; then
+  cat "$KIMIFLOW_HOME/metrics/token-economics.jsonl"
+fi
+printf '{"ok":true}\n'
+EOF
+chmod +x "$F/hooks/launcher-status.sh"
+dirty_home="$TMP/dirty-home"
+mkdir -p "$dirty_home/metrics"
+awk 'BEGIN{for(i=0;i<9000;i++) printf "x"}' > "$dirty_home/metrics/token-economics.jsonl"
+OUT="$(KIMIFLOW_HOME="$dirty_home" HOME="$dirty_home" "$SCRIPT" --root "$F" 2>&1)"; RC=$?
+{ [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -qF 'launcher-status default output bytes'; } \
+  && pass "launcher_budget_uses_clean_home" || fail "launcher_budget_uses_clean_home: rc=$RC :: $OUT"
+
+# AC-4.2 launcher byte budget counts exact stdout bytes, including trailing newline
+F="$TMP/c11"; make_launcher_fixture "$F" "0.1.0"
+cat > "$F/hooks/launcher-status.sh" <<'EOF'
+#!/usr/bin/env bash
+awk 'BEGIN{for(i=0;i<8000;i++) printf "x"; printf "\n"}'
+EOF
+chmod +x "$F/hooks/launcher-status.sh"
+run "$F"
+{ [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -qF 'launcher-status default output bytes: 8001'; } \
+  && pass "launcher_budget_counts_trailing_newline" || fail "launcher_budget_counts_trailing_newline: rc=$RC :: $OUT"
 
 # NOTE: real-repo version consistency is verified MANUALLY before a release
 # (`bash hooks/release-consistency-check.sh`), NOT asserted here — this unit test must stay a

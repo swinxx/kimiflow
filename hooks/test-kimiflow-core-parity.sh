@@ -7,6 +7,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE_SHA="${KIMIFLOW_CORE_PARITY_BASE_SHA:-72282e6}"
 WORK="$(mktemp -d)"
+WORK_REAL="$(cd "$WORK" 2>/dev/null && pwd -P || printf '%s' "$WORK")"
 trap 'rm -rf "$WORK"' EXIT
 
 OLD_HOOKS="$WORK/old-hooks"
@@ -27,6 +28,29 @@ git -C "$REPO" config user.email "kimiflow@example.test"
 git -C "$REPO" config user.name "Kimiflow Test"
 printf 'hello\n' > "$REPO/README.md"
 printf 'echo hi\n' > "$REPO/hooks/a.sh"
+mkdir -p "$REPO/.kimiflow/project"
+cat > "$REPO/.kimiflow/project/IMPROVEMENTS.md" <<'EOF'
+# Improvements
+## Priorisierte Slices
+
+### 1. Release-Doku-Konsistenz automatischer machen
+- Idee: foo
+
+### 2. Hook-Doku synchronisieren
+- Idee: bar
+
+## Nicht-Ziele
+- nix
+EOF
+cat > "$REPO/.kimiflow/project/FINDINGS.md" <<'EOF'
+# Findings
+## Offen
+
+### KF-F-001 - Beispiel-Finding
+- Status: offen
+
+## Erledigt / ueberholt
+EOF
 git -C "$REPO" add README.md hooks/a.sh
 git -C "$REPO" commit -q -m init
 
@@ -39,21 +63,42 @@ normalize() {
     -e "s#$OLD_ROOT#ROOT#g" \
     -e "s#$ROOT#ROOT#g" \
     -e "s#$REPO#REPO#g" \
+    -e "s#$WORK_REAL#WORK#g" \
     -e "s#$WORK#WORK#g" \
+    -e 's#WORK/cases/[A-Za-z0-9_.:-]+-(old|new)#REPO#g' \
     -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z/TIMESTAMP/g' \
     -e 's/bh_[A-Za-z0-9_:-]+/bh_ID/g' \
     -e 's/[0-9a-f]{40}/COMMIT/g'
 }
 
 run_one() {
-  local label="$1" script="$2" argstr="$3" old_script new_script diverged
+  local label="$1" script="$2" argstr="$3" old_script new_script diverged case_old case_new arg old_args new_args
   old_script="$OLD_HOOKS/$script"
   new_script="$ROOT/hooks/$script"
   args=()
   [ -n "$argstr" ] && IFS='|' read -r -a args <<< "$argstr"
 
-  (cd "$REPO" && HOME="$HOME_DIR" KIMIFLOW_OBSIDIAN_URL= KIMIFLOW_OBSIDIAN_API_KEY= bash "$old_script" ${args[@]+"${args[@]}"}) > "$WORK/o.out" 2> "$WORK/o.err"; o_code=$?
-  (cd "$REPO" && HOME="$HOME_DIR" KIMIFLOW_OBSIDIAN_URL= KIMIFLOW_OBSIDIAN_API_KEY= bash "$new_script" ${args[@]+"${args[@]}"}) > "$WORK/n.out" 2> "$WORK/n.err"; n_code=$?
+  mkdir -p "$WORK/cases"
+  case_old="$WORK/cases/${label}-old"
+  case_new="$WORK/cases/${label}-new"
+  rm -rf "$case_old" "$case_new"
+  cp -R "$REPO" "$case_old"
+  cp -R "$REPO" "$case_new"
+
+  old_args=()
+  new_args=()
+  for arg in ${args[@]+"${args[@]}"}; do
+    if [ "$arg" = "__REPO__" ]; then
+      old_args+=("$case_old")
+      new_args+=("$case_new")
+    else
+      old_args+=("$arg")
+      new_args+=("$arg")
+    fi
+  done
+
+  (cd "$case_old" && HOME="$HOME_DIR" KIMIFLOW_OBSIDIAN_URL= KIMIFLOW_OBSIDIAN_API_KEY= bash "$old_script" ${old_args[@]+"${old_args[@]}"}) > "$WORK/o.out" 2> "$WORK/o.err"; o_code=$?
+  (cd "$case_new" && HOME="$HOME_DIR" KIMIFLOW_OBSIDIAN_URL= KIMIFLOW_OBSIDIAN_API_KEY= bash "$new_script" ${new_args[@]+"${new_args[@]}"}) > "$WORK/n.out" 2> "$WORK/n.err"; n_code=$?
 
   normalize < "$WORK/o.out" > "$WORK/o.out.norm"
   normalize < "$WORK/o.err" > "$WORK/o.err.norm"
@@ -85,9 +130,13 @@ run_one() {
 }
 
 CASES=(
-  "active_status_none::active-run.sh::status|--root|$REPO"
-  "background_list_empty::background-run.sh::list|--root|$REPO|--json"
-  "improvements_list_missing::improvements-status.sh::list|--root|$REPO"
+  "active_status_none::active-run.sh::status|--root|__REPO__"
+  "background_list_empty::background-run.sh::list|--root|__REPO__|--json"
+  "improvements_list_open::improvements-status.sh::list|--root|__REPO__"
+  "improvements_json_open::improvements-status.sh::list|--root|__REPO__|--json"
+  "improvements_unknown_queue::improvements-status.sh::list|--root|__REPO__|--queue|bogus"
+  "improvements_dry_run::improvements-status.sh::mark-done|release|--root|__REPO__|--commit|abc123"
+  "improvements_mark_write::improvements-status.sh::mark-done|release|--root|__REPO__|--commit|abc123|--write"
   "project_map_status_missing::project-map-status.sh::status"
   "project_map_coverage_missing::project-map-status.sh::coverage|--affected|hooks/a.sh"
   "launcher_missing_root::launcher-status.sh::--root|$WORK/missing-root"

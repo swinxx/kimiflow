@@ -116,4 +116,11 @@ after="$(md5 -q "$REPO/.kimiflow/project/IMPROVEMENTS.md" 2>/dev/null || md5sum 
 # --- unknown queue errors ---
 if run list --queue bogus >/dev/null 2>&1; then fail "unknown_queue_errors"; else pass "unknown_queue_errors"; fi
 
+# --- R1 divergence: mutating explicit invalid roots fail closed ---
+if "$SCRIPT" mark-done release --root "$REPO/missing-root" --write >/dev/null 2>&1; then
+  fail "invalid_root_mutation_fails_closed"
+else
+  pass "invalid_root_mutation_fails_closed"
+fi
+
 if [ "$FAILS" -eq 0 ]; then echo "ALL PASS (improvements-status)"; exit 0; else echo "$FAILS FAILED"; exit 1; fi

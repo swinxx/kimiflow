@@ -5,7 +5,7 @@
 # directory at the git root — so installing kimiflow never polices unrelated repos. No-op for
 # every non-git command and every repo without `.kimiflow/`. LIMITATION: an explicit pathspec
 # commit (`git commit <path>`) is NOT covered — parsing a pathspec from a shell string needs an
-# AST, not a regex (see reference.md → "Commit hygiene"). This is path hygiene, not a secret
+# AST, not a regex (see docs/commit-secret-gate.md). This is path hygiene, not a secret
 # scanner: pair it with a content scanner (gitleaks/trufflehog) for in-source secrets.
 #
 # Requires `jq` (same dependency as test-gate.sh). Without jq the hook cannot parse
@@ -15,7 +15,7 @@
 # SCOPE: this is FILENAME/PATH hygiene, NOT secret-in-source detection — it matches
 # secret-looking staged PATHS, never file CONTENTS (a key pasted into app.js passes).
 # Pair it with a content scanner (gitleaks / trufflehog) for in-source secrets. The
-# patterns are a MINIMUM deny-list (see reference.md → "Commit hygiene"); false positives
+# patterns are a MINIMUM deny-list (see docs/commit-secret-gate.md); false positives
 # on filenames that merely contain secret-words are possible.
 set -u
 
@@ -54,7 +54,7 @@ git_root() { # $1 = candidate cwd; $2.. = extra git global opts in command order
 # — over-blocking is the safe failure for a fail-closed gate, and it is rare (jq is required;
 # the deny message says to install it). The precise jq path below does NOT over-block. We do
 # not sharpen this with more regex: reliably classifying a shell command needs an AST, not a
-# regex over a serialized string (see reference.md → "Commit hygiene").
+# regex over a serialized string (see docs/commit-secret-gate.md).
 if ! command -v jq >/dev/null 2>&1; then
   if printf '%s' "$input" | grep -qE 'git.{0,200}(add|commit)'; then
     cwd="$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
@@ -170,7 +170,7 @@ if git_sub commit; then
   # The `-a` matcher fires when `a` appears in a SHORT-option cluster BEFORE a value-taking option
   # (m/c/C/F/S/u — incl. optional-arg `-S`gpg / `-u`untracked) — so `-am`/`-vam`/`-qam` are caught,
   # while `-ma` (a message), `-uall`, `-Sabc` are NOT; `--all` is a whole word (not `--allow-empty`).
-  # KNOWN RESIDUALS (regex ≠ shell parser — documented, see reference.md → "Commit hygiene"):
+  # KNOWN RESIDUALS (regex ≠ shell parser — documented, see docs/commit-secret-gate.md):
   # a command-position-anchor evasion — `env X=y`/`sudo`, a path-prefixed `/usr/bin/git`, or a
   # `command`/`builtin`/`exec git` wrapper (all defeat the `git`-at-command-position anchor, gate-wide);
   # an escaped quote inside the message; a QUOTED `-C` path containing a space (`git -C "my repo"` —

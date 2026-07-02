@@ -153,7 +153,7 @@ seed_arepo .env;     assert_allow "git commit --allow-empty -m wip" "commit_allo
 seed_arepo .env;     assert_allow "git commit -uall -m wip"        "commit_u_value_all_not_dash_a"      "$AREPO"
 seed_arepo .env;     assert_allow "git commit -Sabc123 -m wip"     "commit_S_keyid_a_not_dash_a"        "$AREPO"
 # documented residuals (regex ≠ shell parser) — locked as KNOWN ALLOW so each gap is honest, not silent:
-# (a) env/sudo prefix defeats the command-position anchor (gate-wide; see reference.md "Commit hygiene")
+# (a) env/sudo prefix defeats the command-position anchor (gate-wide; see docs/commit-secret-gate.md)
 seed_arepo .env;     assert_allow "env X=1 git commit -am wip"   "commit_env_prefix_known_gap"           "$AREPO"
 seed_arepo .env;     assert_allow "sudo git commit -am wip"      "commit_sudo_prefix_known_gap"          "$AREPO"
 # (b) an escaped quote inside the message desyncs the quote-strip
@@ -240,7 +240,7 @@ allow_nojq "git commit -m x"                     "nojq_no_kimiflow_allowed" "$PL
 # --- documented intentional over-block: the blunt no-jq fallback greps the raw payload, so a
 # benign command that merely MENTIONS git add/commit is over-blocked. This is deliberate (safe
 # failure for a fail-closed gate; install jq for the precise path). These cases LOCK that
-# contract — see commit-secret-gate.sh no-jq comment + reference.md "Commit hygiene". ---
+# contract — see commit-secret-gate.sh no-jq comment + docs/commit-secret-gate.md. ---
 deny_nojq  'echo "git commit later"'             "nojq_benign_git_mention_overblocked(intended)"  # AC-1
 allow_nojq 'echo "deploy later"'                 "nojq_nongit_phrase_allowed"                      # AC-1
 

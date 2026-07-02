@@ -2,23 +2,24 @@
 
 Date: 2026-07-02
 
-Scope: exit audit for `docs/superpowers/plans/2026-07-02-rebuild-program.md` after R2 Group B, R3 render hardening, and R4 budget checks.
+Scope: exit audit for `docs/superpowers/plans/2026-07-02-rebuild-program.md` after the R2 prose inversion, R3 render hardening, and R4 budget checks.
 
 ## Verdict
 
-Exit gate is not fully open for the original rebuild program.
+Exit gate is open for the original rebuild program.
 
-Mechanical gates are green, and the confirmed R4 implementation bugs found by the exit audit were fixed:
+The remaining R2 prose-inversion gap was closed after the earlier audit. Mechanical gates are green, and the
+confirmed R4 implementation bugs found by the exit audit were fixed:
 
 - Render drift check now uses `kimiflow_core.render --check` and does not overwrite manual output drift.
 - Launcher default/pretty output budgets are asserted in `hooks/test-launcher-status.sh`.
-- `release-consistency-check.sh` enforces byte ceilings for always-loaded skill files, `phases/*.md`, and launcher output.
+- `release-consistency-check.sh` enforces a 15,000-byte root `SKILL.md` ceiling, a 15,000-byte Codex skill ceiling, `phases/*.md` ceilings, and launcher output ceilings.
 - Python-ported helpers now carry their R2 invariant targets in the production Python modules instead of Bash shim comments.
 - Render sources are named as canonical workflow plus Codex host overlay.
-
-Open program gap:
-
-- `SKILL.md` is still 54,126 bytes, not the intended thin 10-15K always-loaded driver. The R2 approval packet explicitly approved only Group B movement; Groups A/C/D were not safely requested in that packet, and the phase files remain R2.3 skeletons. Completing the original prose inversion still requires a protected-rule movement plan for phase detail / smoke contracts / reference repartitioning and another invariant-preserving move series.
+- `SKILL.md` is now a thin driver at 13,084 bytes; `skills/kimiflow/SKILL.md` is 13,368 bytes.
+- Phase detail is populated in `phases/phase-0-setup.md` through `phases/phase-7-review-commit.md`, with post-R2 phase-read enforcement carried by `hooks/active-run.sh` and the phase gates.
+- Expanded scaling-knob prose moved to `docs/kimiflow-scaling-knobs.md`; `reference.md` remains the broad reference authority, not an always-loaded instruction burden.
+- The invariant target map now points the moved phase rules at their phase files and retains runtime verification through `hooks/test-active-run.sh` and `hooks/kimiflow_core/tests/test_phase_reads.py`.
 
 ## Evidence
 

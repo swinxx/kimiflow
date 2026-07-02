@@ -8,7 +8,7 @@ und persistente Artefakte geerdet.
 
 | Schicht | Dateien | Aufgabe |
 |---|---|---|
-| Canonical Engine | `docs/render/kimiflow/`, `reference.md` | Definiert Modi, Phasen, Scope-Regeln, Project Map, Review- und Commit-Kontrakt und rendert die Host-Skills. |
+| Canonical Engine | `docs/render/kimiflow/`, `phases/`, `reference.md`, `docs/kimiflow-scaling-knobs.md` | Definiert den duennen Always-loaded Driver, on-demand Phasenregeln, Scope-Regeln, Project Map, Review- und Commit-Kontrakt und rendert die Host-Skills. |
 | Host Packaging | `SKILL.md`, `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/`, `skills/kimiflow/` | Macht dieselbe Engine fuer Claude Code und Codex installierbar und sichtbar. |
 | Mechanical Layer | `hooks/*.sh`, `hooks.json`, `hooks/hooks.json` | Implementiert Gate-Resolver, Host-Hooks, Installer und strukturelle Checks. |
 | Project Intelligence | `.kimiflow/project/`, `hooks/project-map-status.sh`, `hooks/memory-router.sh` | Baut lokale Projektkarten, erkennt Staleness, routet bounded Memory/Recall und trennt lokale Analyse von Repo-Doku. |
@@ -20,7 +20,7 @@ und persistente Artefakte geerdet.
 User request
   -> /kimiflow in Claude Code oder $kimiflow in Codex
   -> canonical workflow aus SKILL.md
-  -> Detailregeln aus reference.md
+  -> Phasendetails aus phases/*.md plus Detailregeln aus reference.md / docs/
   -> mechanische Resolver/Hooks fuer Gates
   -> Artefakte unter .kimiflow/<slug>/ oder .kimiflow/project/
   -> Commit-Gate stoppt fuer explizites OK
@@ -35,9 +35,9 @@ das lokale Codex-Home geschrieben werden. Beide Skill-Dateien bleiben committed,
 PYTHONPATH="$PWD/hooks" python3 -m kimiflow_core.render
 ```
 
-`hooks/release-consistency-check.sh` rendert vor dem Release neu und faellt bei Drift in `SKILL.md` oder
-`skills/kimiflow/SKILL.md` fehl. Derselbe Check haelt Byte-Budgets fuer die immer geladene Prosa
-(`SKILL.md` <= 56,000 Bytes, Codex-Skill <= 15,000 Bytes), fuer Phase-Dateien
+`hooks/release-consistency-check.sh` rendert vor dem Release per `--check` und faellt bei Drift in
+`SKILL.md` oder `skills/kimiflow/SKILL.md` fehl, ohne lokale Drift zu ueberschreiben. Derselbe Check haelt
+Byte-Budgets fuer die immer geladene Prosa (`SKILL.md` <= 15,000 Bytes, Codex-Skill <= 15,000 Bytes), fuer Phase-Dateien
 (`phases/*.md` jeweils <= 20,000 Bytes) und fuer die Launcher-Default-Ausgabe (JSON <= 8,000 Bytes,
 Pretty <= 12,000 Bytes auf einem sauberen Fixture-Repo).
 
@@ -53,8 +53,9 @@ Pretty <= 12,000 Bytes auf einem sauberen Fixture-Repo).
 
 ## Aenderungsachsen
 
-- Workflow-Aenderungen beginnen in `docs/render/kimiflow/canonical/SKILL.md`; danach wird `SKILL.md`
-  gerendert. Detailregeln gehoeren in `reference.md`.
+- Always-loaded Workflow-Aenderungen beginnen in `docs/render/kimiflow/canonical/SKILL.md`; danach wird
+  `SKILL.md` gerendert. Phasendetails gehoeren in `phases/*.md`, Skalierungsdetails in
+  `docs/kimiflow-scaling-knobs.md`, und breite Referenz-/Maintainerregeln in `reference.md` oder `docs/`.
 - Claude-spezifisches Packaging liegt in `.claude-plugin/` und `hooks/hooks.json`.
 - Codex-spezifisches Packaging liegt in `.codex-plugin/`, `.agents/plugins/`, `skills/kimiflow/`,
   `docs/render/kimiflow/overlays/codex.md` und `hooks/install-codex-hooks.sh`.

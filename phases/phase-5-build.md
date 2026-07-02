@@ -1,3 +1,9 @@
-# Phase 5 Build
+<!-- kimiflow:phase-detail source=docs/render/kimiflow/canonical/SKILL.md -->
 
-R2.3 skeleton only. No protected rule prose has been moved into this file.
+## 🟠 Phase 5 — Implement / fix
+
+**Default: 1 implementation subagent, sequential.** Full tools, fresh context, inputs `PLAN.md` + `ACCEPTANCE.md` + `INTENT.md`/`PROBLEM.md` (+ `DIAGNOSIS.md`).
+
+- **TDD where sensible:** failing test first (Red) → commit tests before the implementation → green → refactor. The Red test commit is the **one defined exception** to the commit-gate rule: test files only, explicitly named paths, announced in one line — production code never rides along (→ reference.md "Commit hygiene"). In fix mode the reproduction is the Red test and `BUG-REPRO.md` records Red command/status before code changes, then Green command/status plus regression evidence after the fix. Address the cause, not the symptom.
+- **Surgical:** every changed line traces to plan/intent/diagnosis. Leave foreign code alone, clean your own orphans. Every deletion carries a caller-grep proving zero callers (→ reference.md "Code mandate"); no proof → don't delete.
+- **Escalation keyed on the FIRST failure's signal** (failure-stop): a clear test/stack failure → one targeted execution-feedback fix; an unclear / unexpected-API / likely-guess failure → escalate to research immediately (`WebSearch`/context7) — don't burn a blind second attempt. After two failed fix attempts, hand the failure evidence (failing command+output, diff, `DIAGNOSIS.md` path) to a **cross-family diagnosis call** when available (bounded, → reference.md "Model routing (per-role)"); its hypothesis is candidate-only — verify before applying. After repeated failure → question the approach/architecture, not just the API. Then stop + ask.

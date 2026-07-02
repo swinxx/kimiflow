@@ -1,0 +1,17 @@
+# Kimiflow Scaling Knobs
+
+Detailed optional capacity knobs for Kimiflow runs. The always-loaded driver keeps only the entry rules; this file carries the expanded contract.
+
+## Scaling knobs (defaults scale with scope — the cross-family lens is ON when available; extras stay OFF until enabled within the agent budget; record in STATE.md)
+
+> **Display verbosity is NOT a knob.** Always-on, changes only visible output volume — never gates, cost, quality, or behavior. Never couple it to anything gate- or cost-related (→ reference.md "Display verbosity").
+
+- **Parallel implementation (incl. merge):** ≥2 genuinely independent, file-disjoint, small tasks → implementers with `isolation: worktree`, then sequential rebase/merge (test baseline after each, no octopus), then phase 6. Each parallel task carries its `Consumes:`/`Produces:` block.
+- **Best-of-N with tests:** a hard, fully test-encoded task → 2–3 candidate implementations in parallel worktrees, keep the one passing the most acceptance + regression tests; counts against the agent budget. **Auto-offer (best-of-2):** scope=`large` ∧ every AC's method is an automated test ∧ cross-family available ∧ the pre-build summary is shown → offer it there (decline-able; `build-gate off`/headless → no offer). The test oracle is authored + committed in the main worktree BEFORE fan-out (the Phase-5 Red commit); candidates write production code only, **uncommitted** (failure → best-of-1 + `best_of_2: degraded (<reason>)` in STATE.md). Winner = most tests green (tie → session-model); the winning diff continues through the normal Phase 5→7 path.
+- **Cross-family reviewer — now the default, not a knob:** one plan-gate lens and one code-review lens route to a different model family whenever a cross-family CLI is available → breaks same-family blind spots. Opt-out: `.kimiflow/cross-family` = `off`. Mechanics → reference.md "Model routing (per-role)".
+- **Dedicated Simplicity prosecutor:** a blind, adversarial reviewer whose ONLY job is the Simplicity dimension (→ reference.md "Review rubric") — "rewrite the smallest version that keeps the tests green; flag every line no test/requirement demands". Auto-on at `large`, or when the size tripwire fires on a smaller run; at `small` the dimension stays folded into the existing code-reviewer (no extra spawn). Advisory only.
+- **Multi-run gate:** for `large`/critical, take the reviewer's binary verdict 3× by majority (variance reduction).
+- **Deeper debugging:** for a stubborn bug, stop patching and run a systematic, hypothesis-first pass (reproduce → isolate → root-cause) before further edits.
+- **Hard test-gate (opt-in, per project):** kimiflow ships a Stop hook (`hooks/`) that blocks finishing on red tests — see → reference.md "Hard test-gate" to enable.
+- **Anti-reward-hacking hardening (critical code):** held-out/hidden tests, stricter diff inspection for test manipulation.
+- **Behavioral evals (out-of-CI, on-demand):** pressure-test the gates against rationalization with subagents loaded with the real skill — see `evals/` (the `testing-skills-with-subagents` tier). Slow/LLM-judged; never wired into CI.

@@ -1,3 +1,29 @@
-# Phase 2 Understand
+<!-- kimiflow:phase-detail source=docs/render/kimiflow/canonical/SKILL.md -->
 
-R2.3 skeleton only. No protected rule prose has been moved into this file.
+## 🟣 Phase 2 — Understand & research / diagnose (memory-first → recall → understanding ∥ web → synthesis → save)
+
+Goal: kimiflow must truly understand the affected code before planning — evidence-based. Full checklists: → reference.md "Understand & research", "Fix mode", "Project memory & standards".
+
+0. **Project memory first** (cheap, all tiers). Read the project's `AGENTS.md`/`CLAUDE.md` conventions plus `.kimiflow/STANDARDS.md` and `.kimiflow/DECISIONS.md` if present. Then run `MR = ${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/memory-router.sh status` and read only the bounded always-on memory (`.kimiflow/project/MEMORY.md`) when it is present and under budget. → reference.md "Memory Router & Learning Loop".
+1. **Recall before researching** (local first, providers optional). Build key terms from `INTENT.md`/`PROBLEM.md`/`AUDIT-INTENT.md`, run `MR recall --query-file <artifact> --write .kimiflow/<slug>/RECALL.md`, then run `MR provider health` and do a bounded **Vault Pulse** before web research. For `small`/`quick`, the Vault Pulse is still required but tiny: one focused query from the current intent/problem, at most 3 relevant hits, and one `vault_health:`/`vault_pulse:` note in `STATE.md` or `RECALL.md`. If `direct_search_ready=true`, search the connected Vault MCP directly; if only `connected_local_only`, run `MR provider prefetch --query "<key terms>" --write` and continue from the handoff; if no Vault/auth/tool is available, record the graceful skip and continue. Search **claude-mem** only for uncovered/stale gaps. Fresh relevant hits replace web research; re-research only stale/uncovered hits, with a different vector. → reference.md "Memory recall".
+1a. **Current-State Pulse / Gate** (source freshness before Spec/Plan, token-cheap even for `small`). `CSG` = `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/current-state-gate.sh`. Run `CSG assess --input <INTENT|PROBLEM|AUDIT-INTENT>` for every non-trivial run and persist the JSON as `.kimiflow/<slug>/CURRENT-STATE.json`. For `small`/`quick`, this is a bounded freshness pulse: if `current_state_risk=low`, write `.kimiflow/<slug>/CURRENT-STATE.md` with `Status: checked`, risk low, and "no external current-source research needed"; do not browse. If `current_state_risk=medium|high`, do not finalize `RESEARCH.md`/`DIAGNOSIS.md`, `PLAN.md`, or any spec until current primary-source evidence is recorded in `.kimiflow/<slug>/CURRENT-STATE.md` or `RECALL.md` and `CSG verify --assessment .kimiflow/<slug>/CURRENT-STATE.json --recall <file>` returns `OPEN`. If it returns `CLOSED`, research current official docs/release notes/schema docs first. → reference.md "Current-State Pulse / Gate".
+
+1b. **Section lookup** (map-backed runs, token-cheap suggestion — never a gate). When `.kimiflow/project/INDEX.json` exists, run `${CLAUDE_PLUGIN_ROOT:-$CLAUDE_SKILL_DIR}/hooks/suggest-affected-sections.sh --intent .kimiflow/<slug>/INTENT.md` (or `--text "<problem terms>"`; fix/audit pass `PROBLEM.md`/`AUDIT-INTENT.md`) to rank likely sections from their `symbols`/`files`/`prefixes`/name, then feed the top sections' `paths` to `PMS coverage --affected <path>...` instead of guessing paths. No match or no index → it returns `{"sections":[]}` and you proceed normally. → reference.md "Project Map Bootstrap".
+
+**Feature → understand & research:**
+2. **Codebase understanding** (read-only, `Explore` agent, input `INTENT.md` + project memory) → the checklist in reference.md "Understand & research". Back every claim with `file:line`; unproven → "NOT VERIFIED". Depth by scope and by `PMS coverage`: `compressed` = verify map facts plus touched code only, `targeted` = stale affected sections plus touched code, `full` = normal deeper codebase exploration.
+3. **External research** (`general-purpose` + `WebSearch`/context7/`WebFetch`): for `small`/`quick`, always do the Current-State Pulse first; browse only when it reports `medium|high` or when vault + codebase leave a current external gap. Parallel to step 2 when both are needed.
+4. **Synthesis → `RESEARCH.md`** (structure in reference.md, incl. open unknowns). **Mini-gate:** a plan-blocking unknown → resolve first, don't plan on assumptions.
+
+**Fix → understand & diagnose** (prove first, then fix):
+2. **Reproduce** — actually trigger the bug, ideally a failing test (proof: real + where). Write the Red evidence to `BUG-REPRO.md` before changing production code. Not reproducible = a finding → clarify with the user, don't fix blindly.
+3. **Verify the root cause** (input `PROBLEM.md`) — find AND prove the cause (`file:line` + why that spot produces the symptom). NOT the first guess.
+4. **Fix research (proactive, BEFORE the fix)** — how is this *currently* solved correctly? Recall (vault/claude-mem) → `WebSearch`/context7/`WebFetch` → official docs/issues; check the obvious guess against the current state, discard stale/naive approaches. → reference.md "Fix mode".
+5. **Synthesis → `DIAGNOSIS.md`** (→ reference.md "Fix mode"). **Diagnosis gate:** root cause not proven → do NOT fix (keep investigating or stop + ask).
+
+**Audit → find the fat** (read-only, evidence-based):
+2. **Survey the target** (`Explore` agent, input `AUDIT-INTENT.md`): map what exists and why. For each non-trivial item ask the **existence-first** question — not "can we dedupe" but "should this exist at all".
+3. **Tag findings** `yagni`/`delete`/`shrink`/`stdlib` — each with `path:line` + replacement + a repo-wide pre-delete grep (→ 0 for `delete`) + a git-history-freshness note. → reference.md "Audit mode".
+4. **Synthesis → `AUDIT.md`**: self-contained **slices** ranked biggest-cut-first + a **do-NOT-touch** list. **Caller-grep is a MINIMUM** — dynamic/reflective refs escape it, so tests + the phase-4 refute-the-cut lens are the backstop. Structure → reference.md "Audit mode".
+
+**Always last — vault-save** (automatic — only if a vault MCP is connected; else skip + note in STATE) per → reference.md "Vault conventions". Report the path. Don't save trivial lookups.
